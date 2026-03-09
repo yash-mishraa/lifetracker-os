@@ -1,0 +1,23 @@
+
+> lifetracker@0.1.0 build
+> next build
+
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 6.3s
+  Running TypeScript ...
+Failed to compile.
+
+./src/lib/services/task-service.ts:9:10
+Type error: Module '"crypto"' has no exported member 'v4'.
+
+[0m [90m  7 |[39m   [33mTaskStatus[39m[33m,[39m
+ [90m  8 |[39m } [36mfrom[39m [32m"@/lib/types/task"[39m[33m;[39m
+[31m[1m>[22m[39m[90m  9 |[39m [36mimport[39m { v4 [36mas[39m uuidv4 } [36mfrom[39m [32m"crypto"[39m[33m;[39m
+ [90m    |[39m          [31m[1m^[22m[39m
+ [90m 10 |[39m
+ [90m 11 |[39m [90m// ─── Local Storage Helpers ───────────────────────────────────────────────────[39m
+ [90m 12 |[39m[0m
+Next.js build worker exited with code: 1 and signal: null
