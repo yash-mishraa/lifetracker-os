@@ -1,3 +1,4 @@
+//dashboard-service.ts
 import { getTasks } from './task-service';
 import { getHabits, getHabitLogs } from './habit-service';
 import { getHealthLogs, getHealthGoals } from './health-service';
@@ -40,15 +41,15 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
   const todayStr = today.toISOString().split('T')[0];
   const dayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday...
 
-  const [allTasks, allHabits, habitLogs, healthLogs, timeLogs, allGoals] = await Promise.all([
-    getTasks(),
-    getHabits(),
-    getHabitLogs(), // Fetches all, we filter locally
-    getHealthLogs(),
-    getTimeLogs(start, end),
-    getGoals(),
-    getHealthGoals()
-  ]);
+const [allTasks, allHabits, habitLogs, healthLogs, timeLogs, allGoals, healthGoals] = await Promise.all([
+  getTasks(),
+  getHabits(),
+  getHabitLogs(),
+  getHealthLogs(),
+  getTimeLogs(start, end),
+  getGoals(),
+  getHealthGoals()
+]);
 
   // --- TASKS ---
 const allDueToday = allTasks.filter(t => t.status !== 'completed' || 
@@ -85,9 +86,9 @@ const totalDueTodayCount = allDueToday.length;
   const todayHealthLog = healthLogs.find(l => l.date === todayStr) || null;
 let loggedMetricsCount = 0;
 if (todayHealthLog) {
-  if ((todayHealthLog.sleep_hours ?? 0) >= HealthGoals.sleep_hours_goal) loggedMetricsCount++;
-  if ((todayHealthLog.water_intake ?? 0) >= HealthGoals.water_intake_goal) loggedMetricsCount++;
-  if ((todayHealthLog.steps ?? 0) >= HealthGoals.steps_goal) loggedMetricsCount++;
+  if ((todayHealthLog.sleep_hours ?? 0) >= healthGoals.sleep_hours_goal) loggedMetricsCount++;
+  if ((todayHealthLog.water_intake ?? 0) >= healthGoals.water_intake_goal) loggedMetricsCount++;
+  if ((todayHealthLog.steps ?? 0) >= healthGoals.steps_goal) loggedMetricsCount++;
   if (todayHealthLog.workout_done) loggedMetricsCount++;
 }
 
@@ -117,7 +118,7 @@ if (todayHealthLog) {
   if (focusRate > 1) focusRate = 1;
 
   // Health Target: Did they log at least 3 things today?
-  let healthRate = loggedMetricsCount / 7;
+  let healthRate = loggedMetricsCount / 4;
   if (healthRate > 1) healthRate = 1;
 
   const score = Math.round((taskRate * 30) + (habitRate * 30) + (focusRate * 20) + (healthRate * 20));
