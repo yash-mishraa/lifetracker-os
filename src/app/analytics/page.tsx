@@ -46,7 +46,7 @@ export default function AnalyticsPage() {
         </div>
         
         <div className="flex items-center gap-3">
-          <Select value={daysBack} onValueChange={setDaysBack}>
+          <Select value={daysBack} onValueChange={(val) => setDaysBack(val || "7")}>
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Timeframe" />
             </SelectTrigger>

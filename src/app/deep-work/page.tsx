@@ -116,7 +116,7 @@ export default function DeepWorkPage() {
         start_time: start,
         end_time: end,
         duration_seconds: accumulatedTimeRef.current,
-        timer_type: 'deep_work'
+        timer_type: 'Deep Work'
       });
       
       toast({

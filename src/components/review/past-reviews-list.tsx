@@ -30,7 +30,7 @@ export function PastReviewsList({ reviews }: PastReviewsListProps) {
         <CardDescription>Look back at your previous weeks and tracked progress.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion className="w-full">
           {reviews.map((review) => {
             const start = parseISO(review.week_start_date);
             const end = parseISO(review.week_end_date);

@@ -1,4 +1,4 @@
-export type TimerType = 'Pomodoro' | 'Manual';
+export type TimerType = 'Pomodoro' | 'Manual' | 'Deep Work';
 
 export interface TimeLog {
   id: string;

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { TimeLog, TimeLogFormData, ProjectTimeStats } from '../types/time';
-import { Task } from '../types';
+import { Task } from '../types/task';
 import { startOfDay, startOfWeek, endOfDay, endOfWeek, parseISO } from 'date-fns';
 
 const TIME_LOGS_STORAGE_KEY = 'lifeos_time_logs';
@@ -149,7 +149,7 @@ export async function getProjectFocusTime(tasks: Task[], startDate?: Date, endDa
   const taskToProjectMap = new Map<string, string>();
   tasks.forEach(t => {
     if (t.project) {
-      taskToProjectMap.set(t.id, t.project);
+      taskToProjectMap.set(t.id, t.project.name);
     }
   });
 

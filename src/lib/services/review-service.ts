@@ -35,7 +35,7 @@ export async function getWeeklyMetricsSnapshot(dateInWeek: Date = new Date()): P
 
   // Tasks Completed (only those updated/completed within this week)
   const tasksCompleted = tasks.filter(t => {
-    if (t.status !== 'Completed' || !t.updated_at) return false;
+    if (t.status !== 'completed' || !t.updated_at) return false;
     const d = parseISO(t.updated_at);
     return d >= start && d <= end;
   }).length;

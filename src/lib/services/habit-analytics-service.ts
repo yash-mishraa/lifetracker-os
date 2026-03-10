@@ -97,11 +97,37 @@ export async function getAdvancedHabitAnalytics(daysToFetch: number = 30): Promi
   let currentMax = 0;
   let allTimeMax = 0;
 
-  habits.forEach(h => {
-     if (h.current_streak > currentMax) currentMax = h.current_streak;
-     if (h.longest_streak > allTimeMax) allTimeMax = h.longest_streak;
-  });
+  habits.forEach(habit => {
+  const habitLogs = logs
+    .filter(l => l.habit_id === habit.id && l.completed)
+    .map(l => l.date)
+    .sort();
+    let current = 0;
+  let longest = 0;
+  let streak = 0;
+  let prev: string | null = null;
 
+  for (const dateStr of habitLogs) {
+    if (prev) {
+      const diff = Math.round((new Date(dateStr).getTime() - new Date(prev).getTime()) / 86400000);
+      streak = diff === 1 ? streak + 1 : 1;
+    } else {
+      streak = 1;
+    }
+    longest = Math.max(longest, streak);
+    prev = dateStr;
+  }
+   let d = new Date();
+  current = 0;
+  while (true) {
+    const ds = format(d, 'yyyy-MM-dd');
+    if (habitLogs.includes(ds)) { current++; d = subDays(d, 1); }
+    else break;
+  }
+
+  if (current > currentMax) currentMax = current;
+  if (longest > allTimeMax) allTimeMax = longest;
+});
   let streakPrediction = "Keep building those habits!";
   if (currentMax > 0 && currentMax < allTimeMax) {
     const diff = allTimeMax - currentMax;

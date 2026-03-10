@@ -19,17 +19,17 @@ export function TodayTasksCard({ initialTasks, onTaskChange }: TodayTasksCardPro
   const { toast } = useToast();
 
   const handleToggle = async (task: Task) => {
-    const isEditingToComplete = task.status !== 'Completed';
+    const isEditingToComplete = task.status !== 'completed';
     
     // Optimistic UI Update
     setTasks(prev => prev.map(t => 
-      t.id === task.id ? { ...t, status: isEditingToComplete ? 'Completed' : 'To Do' } : t
+      t.id === task.id ? { ...t, status: isEditingToComplete ? 'completed' : 'todo' } : t
     ));
 
     try {
       await updateTask(task.id, { 
-        status: isEditingToComplete ? 'Completed' : 'To Do',
-        updated_at: new Date().toISOString()
+        status: isEditingToComplete ? 'completed' : 'todo',
+        completed_at: isEditingToComplete ? new Date().toISOString() : null
       });
       onTaskChange(); // Tell parent to fetch new summary to update rings/score
     } catch (err: any) {
@@ -48,7 +48,7 @@ export function TodayTasksCard({ initialTasks, onTaskChange }: TodayTasksCardPro
             <CardDescription>Priority items for the day</CardDescription>
           </div>
           <Badge variant="secondary" className="font-medium text-xs">
-            {tasks.filter(t => t.status === 'Completed').length} / {tasks.length}
+            {tasks.filter(t => t.status === 'completed').length} / {tasks.length}
           </Badge>
         </div>
       </CardHeader>
@@ -62,7 +62,7 @@ export function TodayTasksCard({ initialTasks, onTaskChange }: TodayTasksCardPro
         ) : (
           <div className="space-y-3">
             {tasks.map(task => {
-              const isDone = task.status === 'Completed';
+              const isDone = task.status === 'completed';
               return (
                 <div 
                   key={task.id} 
@@ -80,7 +80,7 @@ export function TodayTasksCard({ initialTasks, onTaskChange }: TodayTasksCardPro
                       {task.title}
                     </span>
                     {task.project && (
-                       <span className="text-xs text-muted-foreground mt-1.5 line-clamp-1">{task.project}</span>
+                       <span className="text-xs text-muted-foreground mt-1.5 line-clamp-1">{task.project.name}</span>
                     )}
                   </div>
                 </div>

@@ -45,7 +45,7 @@ export async function getAnalyticsData(daysBack: number = 7): Promise<AnalyticsD
   // Max 100 points: 30 Tasks, 30 Habits, 20 Focus Time, 20 Health
   
   // Tasks Score (30 pts)
-  const completedTasks = tasks.filter(t => t.status === 'Completed').length;
+  const completedTasks = tasks.filter(t => t.status === 'completed').length;
   const totalTasks = tasks.length;
   const taskRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
   const taskPoints = Math.round(taskRate * 30);
@@ -118,7 +118,7 @@ export async function getAnalyticsData(daysBack: number = 7): Promise<AnalyticsD
   // 1. Tasks array generating
   // For simplicity, we track completion based on updatedAt IF status == completed
   const tasksCompletedByDayMap = new Map<string, number>();
-  tasks.filter(t => t.status === 'Completed' && t.updated_at).forEach(t => {
+  tasks.filter(t => t.status === 'completed' && t.updated_at).forEach(t => {
     const dStr = t.updated_at!.split('T')[0];
     const d = parseISO(dStr);
     if (d >= startDate && d <= endDate) {

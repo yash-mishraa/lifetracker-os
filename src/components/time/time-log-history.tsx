@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Trash, Timer, Clock } from "lucide-react";
 import { TimeLog } from "@/lib/types/time";
-import { Task } from "@/lib/types";
+import { Task } from "@/lib/types/task";
 import { format, isToday, isYesterday } from "date-fns";
 
 interface TimeLogHistoryProps {
@@ -87,7 +87,7 @@ export function TimeLogHistory({ logs, tasks, onDeleteLog }: TimeLogHistoryProps
                     <TableCell>
                       <div className="font-medium text-sm line-clamp-1">{getTaskName(log.task_id)}</div>
                       {project && (
-                        <div className="text-xs text-muted-foreground mt-0.5">{project}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{project.name}</div>
                       )}
                     </TableCell>
                     <TableCell>

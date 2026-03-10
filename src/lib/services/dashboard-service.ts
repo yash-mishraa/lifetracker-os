@@ -51,13 +51,13 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
 
   // --- TASKS ---
   const allDueToday = allTasks.filter(t => {
-    if (!t.due_date) return false;
-    const due = parseISO(t.due_date);
+    if (!t.deadline) return false;
+    const due = parseISO(t.deadline);
     // Is due today OR is overdue and not completed
-    return isSameDay(due, today) || (due < today && t.status !== 'Completed');
+    return isSameDay(due, today) || (due < today && t.status !== 'completed');
   });
   
-  const completedTodayCount = allDueToday.filter(t => t.status === 'Completed').length;
+  const completedTodayCount = allDueToday.filter(t => t.status === 'completed').length;
   const totalDueTodayCount = allDueToday.length;
 
   // --- HABITS ---
@@ -88,8 +88,8 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
     if (todayHealthLog.water_intake !== undefined) loggedMetricsCount++;
     if (todayHealthLog.weight !== undefined) loggedMetricsCount++;
     if (todayHealthLog.steps !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.calories_consumed !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.workout_duration !== undefined) loggedMetricsCount++;
+    if (todayHealthLog.calories !== undefined) loggedMetricsCount++;
+    if (todayHealthLog.workout_done !== undefined) loggedMetricsCount++;
     if (todayHealthLog.mood !== undefined) loggedMetricsCount++;
   }
 

@@ -99,7 +99,7 @@ export function GoalDialog({ open, onOpenChange, goal, onSubmit }: GoalDialogPro
             <Label>Category</Label>
             <Select
               value={form.category}
-              onValueChange={(val: GoalCategory) => setForm({ ...form, category: val })}
+              onValueChange={(val: string | null) => setForm({ ...form, category: (val as GoalCategory) || "Personal" })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select a category" />

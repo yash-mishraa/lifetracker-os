@@ -158,7 +158,7 @@ export default function TasksPage() {
       />
 
       {/* Tabs for Views */}
-      <Tabs value={activeView} onValueChange={setActiveView}>
+      <Tabs value={activeView} onValueChange={(val) => setActiveView(val || "list")}>
         <TabsList>
           <TabsTrigger value="list">
             <List className="h-3.5 w-3.5 mr-1.5" />

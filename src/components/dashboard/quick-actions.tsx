@@ -7,6 +7,12 @@ import { TaskDialog } from "@/components/tasks/task-dialog";
 import { HabitDialog } from "@/components/habits/habit-dialog";
 import { HealthLogDialog } from "@/components/health/health-log-dialog";
 import { useRouter } from "next/navigation";
+import { createTask } from "@/lib/services/task-service";
+import { createHabit } from "@/lib/services/habit-service";
+import { upsertHealthLog } from "@/lib/services/health-service";
+import { TaskFormData } from "@/lib/types/task";
+import { HabitFormData } from "@/lib/types/habit";
+import { HealthFormData } from "@/lib/types/health";
 
 export function QuickActions({ onActionComplete }: { onActionComplete: () => void }) {
   const [taskOpen, setTaskOpen] = useState(false);
@@ -26,7 +32,9 @@ export function QuickActions({ onActionComplete }: { onActionComplete: () => voi
       <TaskDialog 
         open={taskOpen} 
         onOpenChange={setTaskOpen} 
-        onSave={() => {
+        projects={[]}
+        onSubmit={async (data: TaskFormData) => {
+          await createTask(data);
           setTaskOpen(false);
           onActionComplete();
         }} 
@@ -41,7 +49,8 @@ export function QuickActions({ onActionComplete }: { onActionComplete: () => voi
       <HabitDialog 
         open={habitOpen} 
         onOpenChange={setHabitOpen} 
-        onSave={() => {
+        onSubmit={async (data: HabitFormData) => {
+          await createHabit(data);
           setHabitOpen(false);
           onActionComplete();
         }} 
@@ -56,8 +65,8 @@ export function QuickActions({ onActionComplete }: { onActionComplete: () => voi
       <HealthLogDialog 
          open={healthOpen}
          onOpenChange={setHealthOpen}
-         dateStr={new Date().toISOString().split('T')[0]} // Pre-fill today
-         onSave={() => {
+         onSubmit={async (data: HealthFormData) => {
+           await upsertHealthLog(data);
            setHealthOpen(false);
            onActionComplete();
          }}

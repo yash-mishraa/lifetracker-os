@@ -59,7 +59,7 @@ export async function getGamificationStats(): Promise<GamificationStats> {
   }
 
   // Populate Tasks
-  allTasks.filter(t => t.status === 'Completed' && t.updated_at).forEach(t => {
+  allTasks.filter(t => t.status === 'completed' && t.updated_at).forEach(t => {
     const dStr = t.updated_at!.split('T')[0];
     if (activeDaysMap.has(dStr)) activeDaysMap.get(dStr)!.tasks++;
   });
@@ -132,7 +132,7 @@ export async function getGamificationStats(): Promise<GamificationStats> {
   }
 
   // --- 3. Achievements Calculation ---
-  const totalCompletedTasks = allTasks.filter(t => t.status === 'Completed').length;
+  const totalCompletedTasks = allTasks.filter(t => t.status === 'completed').length;
   const totalFocusHours = allTimeLogs.reduce((acc, l) => acc + l.duration_seconds, 0) / 3600;
 
   const achievements = BADGES_CONFIG.map(config => {
