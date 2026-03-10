@@ -43,11 +43,11 @@ export function HealthCharts({ logs, days = 14 }: HealthChartsProps) {
       result.push({
         dateStr,
         displayDate: format(d, "MMM d"),
-        sleep: log?.sleep_hours || null, // null so it breaks the line if missing, rather than diving to 0
-        water: log?.water_intake || 0,
-        weight: log?.weight || null,
-        steps: log?.steps || 0,
-        calories: log?.calories || 0,
+sleep: log?.sleep_hours != null ? Number(log.sleep_hours) : null,
+water: log?.water_intake ? Number(log.water_intake) : 0,
+weight: log?.weight != null ? Number(log.weight) : null,
+steps: log?.steps ? Number(log.steps) : 0,
+calories: log?.calories ? Number(log.calories) : 0,
         hasLog: !!log
       });
     }
