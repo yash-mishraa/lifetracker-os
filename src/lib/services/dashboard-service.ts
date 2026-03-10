@@ -50,10 +50,15 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
   ]);
 
   // --- TASKS ---
-const allDueToday = allTasks.filter(t => t.status !== 'completed');
-  
-  const completedTodayCount = allDueToday.filter(t => t.status === 'completed').length;
-  const totalDueTodayCount = allDueToday.length;
+const allDueToday = allTasks.filter(t => t.status !== 'completed' || 
+  (t.completed_at && isSameDay(parseISO(t.completed_at), today))
+);
+
+const completedTodayCount = allTasks.filter(t => 
+  t.completed_at && isSameDay(parseISO(t.completed_at), today)
+).length;
+
+const totalDueTodayCount = allDueToday.length;
 
   // --- HABITS ---
   const allScheduledToday = allHabits
