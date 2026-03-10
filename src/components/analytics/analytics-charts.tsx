@@ -32,9 +32,9 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
 
           {/* TASKS TAB */}
           <TabsContent value="tasks" className="h-[300px]">
-             {data.tasksCompletedByDay.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground">No task data available</div>
-            ) : (
+             {data.tasksCompletedByDay.length === 0 || data.tasksCompletedByDay.every(d => d.count === 0) ? (
+  <div className="flex h-full items-center justify-center text-muted-foreground">No task data for this period</div>
+) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.tasksCompletedByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted))" />
@@ -52,7 +52,7 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
 
           {/* FOCUS TAB */}
           <TabsContent value="focus" className="h-[300px]">
-             {data.focusTimeByDay.length === 0 ? (
+             {data.focusTimeByDay.length === 0 || data.focusTimeByDay.every(d => d.hours === 0) ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">No focus data available</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -75,7 +75,7 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
 
           {/* HEALTH (WATER) TAB */}
           <TabsContent value="health" className="h-[300px]">
-             {data.waterIntakeByDay.length === 0 ? (
+             {data.waterIntakeByDay.length === 0 || data.waterIntakeByDay.every(d => d.amount === 0) ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">No health data available</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
