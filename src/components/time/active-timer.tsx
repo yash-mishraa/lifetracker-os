@@ -31,6 +31,11 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
   const [manualHours, setManualHours] = useState("0");
   const [manualMinutes, setManualMinutes] = useState("25");
   const [showManualInput, setShowManualInput] = useState(false);
+
+  // Click-to-edit timer state
+  const [isEditingTimer, setIsEditingTimer] = useState(false);
+  const [editHours, setEditHours] = useState("0");
+  const [editMinutes, setEditMinutes] = useState("25");
   
   const [pomoPhase, setPomoPhase] = useState<PomodoroPhase>('Focus');
   const [pomoRemainingSeconds, setPomoRemainingSeconds] = useState(DEFAULT_POMODORO_SETTINGS.focusTime * 60);
@@ -124,7 +129,7 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
   };
 
   const stopAndSave = async () => {
-    if (totalElapsedInSession.current < 5) {
+    if (totalElapsedInSession.current === 0) {
       resetTimer();
       return;
     }
@@ -163,6 +168,30 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
     setManualHours("0");
     setManualMinutes("25");
     setShowManualInput(false);
+  };
+
+  const openEditTimer = () => {
+    if (isRunning) return;
+    const currentSecs = timerType === 'Manual' ? elapsedSeconds : pomoRemainingSeconds;
+    setEditHours(String(Math.floor(currentSecs / 3600)));
+    setEditMinutes(String(Math.floor((currentSecs % 3600) / 60)));
+    setIsEditingTimer(true);
+  };
+
+  const applyEditTimer = () => {
+    const h = Math.max(0, parseInt(editHours) || 0);
+    const m = Math.max(0, Math.min(59, parseInt(editMinutes) || 0));
+    const totalSecs = h * 3600 + m * 60;
+    if (totalSecs < 60) return;
+    if (timerType === 'Manual') {
+      setElapsedSeconds(0);
+      totalElapsedInSession.current = 0;
+      setElapsedForSave(0);
+    } else {
+      setPomoRemainingSeconds(totalSecs);
+    }
+    setStartTime(null);
+    setIsEditingTimer(false);
   };
 
   const handleTypeChange = (type: TimerType) => {
@@ -206,8 +235,8 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
   const activeTaskName = selectedTaskId && selectedTaskId !== 'unassigned' && tasks.length > 0
     ? tasks.find(t => t.id === selectedTaskId)?.title || "General Focus"
     : "General Focus";
-
-  const canStop = elapsedForSave > 5;
+const canStop = elapsedForSave > 0 || isRunning;
+  
 
   return (
     <>
@@ -258,11 +287,52 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
           )}
         </div>
 
-        {/* Time Display */}
-        <div className="flex justify-center py-2">
-          <span className={`text-7xl md:text-8xl font-bold tabular-nums tracking-tighter ${activeText}`}>
-            {formatTime(displayTime)}
-          </span>
+        {/* Time Display - click to edit */}
+        <div className="flex flex-col items-center py-2">
+          {isEditingTimer ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col items-center">
+                  <Label className="text-xs text-muted-foreground mb-1">Hours</Label>
+                  <Input
+                    type="number" min="0" max="23"
+                    value={editHours}
+                    onChange={e => setEditHours(e.target.value)}
+                    className="w-20 h-12 text-center text-2xl font-bold"
+                    autoFocus
+                  />
+                </div>
+                <span className="text-3xl font-bold mt-4">:</span>
+                <div className="flex flex-col items-center">
+                  <Label className="text-xs text-muted-foreground mb-1">Minutes</Label>
+                  <Input
+                    type="number" min="1" max="59"
+                    value={editMinutes}
+                    onChange={e => setEditMinutes(e.target.value)}
+                    className="w-20 h-12 text-center text-2xl font-bold"
+                    onKeyDown={e => e.key === 'Enter' && applyEditTimer()}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={applyEditTimer}>Set Timer</Button>
+                <Button size="sm" variant="outline" onClick={() => setIsEditingTimer(false)}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1">
+              <span
+                className={`text-7xl md:text-8xl font-bold tabular-nums tracking-tighter ${activeText} ${!isRunning ? 'cursor-pointer hover:opacity-70 transition-opacity' : ''}`}
+                onClick={openEditTimer}
+                title={!isRunning ? "Click to edit time" : ""}
+              >
+                {formatTime(displayTime)}
+              </span>
+              {!isRunning && (
+                <span className="text-xs text-muted-foreground">click to edit</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Task Selector */}
@@ -317,7 +387,7 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
                   : 'opacity-30 cursor-not-allowed'
               }`}
               onClick={stopAndSave}
-              disabled={!canStop}
+              disabled={!isRunning && elapsedForSave === 0}
               title="Stop and Save"
             >
               <Square className="h-5 w-5" />
@@ -458,7 +528,7 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
                     stopAndSave();
                     setIsRunning(false);
                   }}
-                  disabled={!canStop}
+                  disabled={!isRunning && elapsedForSave === 0}
                 >
                   <Square className="h-8 w-8" />
                 </Button>
