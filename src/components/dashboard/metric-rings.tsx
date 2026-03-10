@@ -1,3 +1,5 @@
+//metric-rings.tsx
+
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
@@ -116,7 +118,7 @@ export function MetricRings({ summary }: MetricRingsProps) {
           </div>
         </div>
         <div className="text-center z-10">
-          <div className="text-3xl font-heading font-bold tracking-tight text-emerald-500">{summary.health.loggedMetricsCount} <span className="text-xl text-muted-foreground font-semibold">/ 3</span></div>
+          <div className="text-3xl font-heading font-bold tracking-tight text-emerald-500">{summary.health.loggedMetricsCount} <span className="text-xl text-muted-foreground font-semibold">/ 7</span></div>
           <div className="text-sm text-muted-foreground font-medium mt-1">Health Logs</div>
         </div>
       </Card>

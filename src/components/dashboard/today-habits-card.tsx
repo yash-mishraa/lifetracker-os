@@ -1,3 +1,5 @@
+//today-habits-card.tsx
+
 "use client";
 
 import { useState } from "react";
@@ -60,7 +62,7 @@ export function TodayHabitsCard({ initialHabits, onHabitChange }: TodayHabitsCar
                 className="flex items-center justify-between p-3 rounded-lg border bg-card hover:border-primary/30 transition-all hover:shadow-sm"
               >
                 <div className="flex flex-col">
-                  <span className={`font-medium ${habit.isCompletedToday ? 'text-muted-foreground' : ''}`}>{(habit as any).title}</span>
+                  <span className={`font-medium ${habit.isCompletedToday ? 'text-muted-foreground' : ''}`}>{habit.name}</span>
                   <span className="text-xs text-muted-foreground mt-0.5">{(habit as any).target_value} {(habit as any).unit}</span>
                 </div>
                 <div className="flex items-center gap-3">

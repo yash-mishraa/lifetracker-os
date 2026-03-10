@@ -50,12 +50,7 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
   ]);
 
   // --- TASKS ---
-const allDueToday = allTasks.filter(t => {
-  if (t.status === 'completed') return false;
-  if (!t.deadline) return true; // include tasks with no deadline
-  const due = parseISO(t.deadline);
-  return isSameDay(due, today) || due < today;
-});
+const allDueToday = allTasks.filter(t => t.status !== 'completed');
   
   const completedTodayCount = allDueToday.filter(t => t.status === 'completed').length;
   const totalDueTodayCount = allDueToday.length;
@@ -119,7 +114,7 @@ const allDueToday = allTasks.filter(t => {
   if (focusRate > 1) focusRate = 1;
 
   // Health Target: Did they log at least 3 things today?
-  let healthRate = loggedMetricsCount / 3;
+  let healthRate = loggedMetricsCount / 7;
   if (healthRate > 1) healthRate = 1;
 
   const score = Math.round((taskRate * 30) + (habitRate * 30) + (focusRate * 20) + (healthRate * 20));
