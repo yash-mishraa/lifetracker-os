@@ -147,7 +147,7 @@ export async function getGamificationStats(): Promise<GamificationStats> {
         progress = totalCompletedTasks;
         break;
       case "focus-50":
-        progress = totalFocusHours;
+        progress = Math.round(totalFocusHours * 10) / 10; 
         break;
     }
 
