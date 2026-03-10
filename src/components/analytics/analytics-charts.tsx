@@ -31,11 +31,14 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
           </TabsList>
 
           {/* TASKS TAB */}
-          <TabsContent value="tasks" className="h-[300px]">
-             {data.tasksCompletedByDay.length === 0 || data.tasksCompletedByDay.every(d => d.count === 0) ? (
-  <div className="flex h-full items-center justify-center text-muted-foreground">No task data for this period</div>
-) : (
-              <ResponsiveContainer width="100%" height="100%">
+          <TabsContent value="tasks">
+  <div className="h-[300px] w-full">
+             {data.tasksCompletedByDay.every(d => d.count === 0) ? (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        No task completions in this period
+      </div>
+    ) : (
+      <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.tasksCompletedByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted))" />
                   <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
@@ -48,13 +51,17 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
                 </BarChart>
               </ResponsiveContainer>
             )}
+          </div>
           </TabsContent>
 
           {/* FOCUS TAB */}
-          <TabsContent value="focus" className="h-[300px]">
-             {data.focusTimeByDay.length === 0 || data.focusTimeByDay.every(d => d.hours === 0) ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground">No focus data available</div>
-            ) : (
+          <TabsContent value="focus">
+  <div className="h-[300px] w-full">
+    {data.focusTimeByDay.every(d => d.hours === 0) ? (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        No focus sessions in this period
+      </div>
+    ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.focusTimeByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
@@ -71,13 +78,17 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
                 </AreaChart>
               </ResponsiveContainer>
             )}
+          </div>
           </TabsContent>
 
           {/* HEALTH (WATER) TAB */}
-          <TabsContent value="health" className="h-[300px]">
-             {data.waterIntakeByDay.length === 0 || data.waterIntakeByDay.every(d => d.amount === 0) ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground">No health data available</div>
-            ) : (
+          <TabsContent value="health">
+  <div className="h-[300px] w-full">
+    {data.waterIntakeByDay.every(d => d.amount === 0) ? (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        No health data in this period
+      </div>
+    ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data.waterIntakeByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted))" />
@@ -88,13 +99,17 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
                 </LineChart>
               </ResponsiveContainer>
             )}
+          </div>
           </TabsContent>
 
           {/* GOALS TAB */}
-          <TabsContent value="goals" className="h-[300px]">
-             {data.activeGoalsProgress.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground">No active goals with milestones</div>
-            ) : (
+          <TabsContent value="goals">
+  <div className="h-[300px] w-full">
+    {data.activeGoalsProgress.length === 0 ? (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        No active goals with milestones
+      </div>
+    ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart layout="vertical" data={data.activeGoalsProgress} margin={{ top: 10, right: 30, left: 40, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--muted))" />
@@ -109,6 +124,7 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
                 </BarChart>
               </ResponsiveContainer>
             )}
+          </div>
           </TabsContent>
 
         </Tabs>
