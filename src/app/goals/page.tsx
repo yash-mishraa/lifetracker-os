@@ -258,7 +258,7 @@ export default function GoalsPage() {
                   goal={goal} 
                   onEditGoal={handleOpenGoalDialog} 
                   onDeleteGoal={handleDeleteGoal} 
-                  onAddMilestone={handleOpenMilestoneDialog} 
+                  onAddMilestone={(goalId) => handleOpenMilestoneDialog(goalId)} 
                   onEditMilestone={(ms) => handleOpenMilestoneDialog(goal.id, ms)}
                   onDeleteMilestone={(msId) => handleDeleteMilestone(msId, goal.id)}
                   onToggleMilestone={handleToggleMilestone}
