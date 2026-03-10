@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Play, Pause, Square, RotateCcw, Timer as TimerIcon, Coffee, Quote } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Task } from "@/lib/types/task";
@@ -17,20 +19,22 @@ interface ActiveTimerProps {
 type PomodoroPhase = 'Focus' | 'Break';
 
 export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
-  // Timer settings
   const [timerType, setTimerType] = useState<TimerType>('Pomodoro');
   const [selectedTaskId, setSelectedTaskId] = useState<string>("unassigned");
   
-  // Running state
   const [isRunning, setIsRunning] = useState(false);
   const [startTime, setStartTime] = useState<Date | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0); // For manual UP counting
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [elapsedForSave, setElapsedForSave] = useState(0); // State version for re-render
+
+  // Manual time input state
+  const [manualHours, setManualHours] = useState("0");
+  const [manualMinutes, setManualMinutes] = useState("25");
+  const [showManualInput, setShowManualInput] = useState(false);
   
-  // Pomodoro specific state
   const [pomoPhase, setPomoPhase] = useState<PomodoroPhase>('Focus');
   const [pomoRemainingSeconds, setPomoRemainingSeconds] = useState(DEFAULT_POMODORO_SETTINGS.focusTime * 60);
 
-  // Refs for tracking intervals
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const totalElapsedInSession = useRef<number>(0);
 
@@ -50,21 +54,21 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
     }
   }, [isRunning]);
 
-  // ---- EFFECT: Run the Timer ----
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
         if (timerType === 'Manual') {
           setElapsedSeconds(prev => prev + 1);
           totalElapsedInSession.current += 1;
+          setElapsedForSave(totalElapsedInSession.current); // trigger re-render
         } else {
-          // Pomodoro
           setPomoRemainingSeconds(prev => {
             if (prev <= 1) {
               handlePomodoroComplete();
               return 0;
             }
             totalElapsedInSession.current += 1;
+            setElapsedForSave(totalElapsedInSession.current); // trigger re-render
             return prev - 1;
           });
         }
@@ -78,27 +82,20 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
     };
   }, [isRunning, timerType, pomoPhase]);
 
-  // Handle phase change internally to avoid stale state in closure
   const handlePomodoroComplete = () => {
     setIsRunning(false);
-    
-    // Auto-save the focus session if completed
     if (pomoPhase === 'Focus' && startTime) {
-      saveSession(DEFAULT_POMODORO_SETTINGS.focusTime * 60); // Save the full intended time
+      saveSession(DEFAULT_POMODORO_SETTINGS.focusTime * 60);
     }
-
-    // Switch phases
     if (pomoPhase === 'Focus') {
       setPomoPhase('Break');
       setPomoRemainingSeconds(DEFAULT_POMODORO_SETTINGS.breakTime * 60);
-      // Optional: Play a sound or show a system notification here
     } else {
       setPomoPhase('Focus');
       setPomoRemainingSeconds(DEFAULT_POMODORO_SETTINGS.focusTime * 60);
     }
-    
-    // Reset tracker
     totalElapsedInSession.current = 0;
+    setElapsedForSave(0);
     setStartTime(null);
   };
 
@@ -117,7 +114,7 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
     setIsRunning(false);
     setStartTime(null);
     totalElapsedInSession.current = 0;
-    
+    setElapsedForSave(0);
     if (timerType === 'Manual') {
       setElapsedSeconds(0);
     } else {
@@ -128,7 +125,6 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
 
   const stopAndSave = async () => {
     if (totalElapsedInSession.current < 5) {
-      // Too short to save
       resetTimer();
       return;
     }
@@ -138,11 +134,8 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
 
   const saveSession = async (durationSecs: number) => {
     if (!startTime) return;
-    
-    const end = new Date(); // now
-    // If it was paused and then stopped, the elapsed time determines the true start
+    const end = new Date();
     const calculatedStart = new Date(end.getTime() - (durationSecs * 1000));
-    
     await onSaveLog({
       task_id: selectedTaskId === "unassigned" ? null : selectedTaskId,
       start_time: calculatedStart,
@@ -152,19 +145,37 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
     });
   };
 
-  // Switch timer mode safely
+  // Save a manual time entry directly
+  const saveManualEntry = async () => {
+    const hours = parseInt(manualHours) || 0;
+    const minutes = parseInt(manualMinutes) || 0;
+    const totalSecs = (hours * 3600) + (minutes * 60);
+    if (totalSecs < 60) return;
+    const end = new Date();
+    const start = new Date(end.getTime() - totalSecs * 1000);
+    await onSaveLog({
+      task_id: selectedTaskId === "unassigned" ? null : selectedTaskId,
+      start_time: start,
+      end_time: end,
+      duration_seconds: totalSecs,
+      timer_type: 'Manual'
+    });
+    setManualHours("0");
+    setManualMinutes("25");
+    setShowManualInput(false);
+  };
+
   const handleTypeChange = (type: TimerType) => {
-    if (isRunning) return; // Prevent switching while running
+    if (isRunning) return;
     setTimerType(type);
+    setShowManualInput(false);
     resetTimer();
   };
 
-  // Formatting helpers
   const formatTime = (totalSecs: number) => {
     const h = Math.floor(totalSecs / 3600);
     const m = Math.floor((totalSecs % 3600) / 60);
     const s = totalSecs % 60;
-    
     if (h > 0) {
       return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
@@ -173,7 +184,6 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
 
   const displayTime = timerType === 'Manual' ? elapsedSeconds : pomoRemainingSeconds;
   
-  // Styling
   const bgColors = {
     'Manual': 'bg-blue-500/5',
     'Pomodoro_Focus': 'bg-rose-500/5',
@@ -188,15 +198,16 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
   };
   const activeText = timerType === 'Manual' ? textColors.Manual : (pomoPhase === 'Focus' ? textColors.Pomodoro_Focus : textColors.Pomodoro_Break);
 
-  // Progress calculations for rings
   const totalPomoSecs = pomoPhase === 'Focus' ? DEFAULT_POMODORO_SETTINGS.focusTime * 60 : DEFAULT_POMODORO_SETTINGS.breakTime * 60;
   const progressPercent = timerType === 'Pomodoro' 
     ? ((totalPomoSecs - pomoRemainingSeconds) / totalPomoSecs) * 100 
-    : 100; // Manual ring is always full or slowly filling
+    : 100;
 
   const activeTaskName = selectedTaskId && selectedTaskId !== 'unassigned' && tasks.length > 0
     ? tasks.find(t => t.id === selectedTaskId)?.title || "General Focus"
     : "General Focus";
+
+  const canStop = elapsedForSave > 5;
 
   return (
     <>
@@ -241,9 +252,9 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
             </div>
           )}
           {timerType === 'Manual' && isRunning && (
-             <div className={`flex items-center gap-1.5 text-sm font-medium ${activeText} animate-pulse`}>
-             <span className="w-2 h-2 rounded-full bg-blue-500"></span> Recording
-           </div>
+            <div className={`flex items-center gap-1.5 text-sm font-medium ${activeText} animate-pulse`}>
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span> Recording
+            </div>
           )}
         </div>
 
@@ -271,36 +282,103 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
 
         {/* Controls */}
         <div className="flex justify-center gap-4 pt-2">
-          {!isRunning && (totalElapsedInSession.current > 0 || displayTime < (timerType === 'Pomodoro' ? DEFAULT_POMODORO_SETTINGS.focusTime * 60 : Infinity)) ? (
-             <Button variant="outline" size="icon" className="h-12 w-12 rounded-full" onClick={resetTimer}>
-               <RotateCcw className="h-5 w-5" />
-             </Button>
+          {/* Reset button */}
+          {!isRunning && (elapsedForSave > 0 || displayTime < (timerType === 'Pomodoro' ? DEFAULT_POMODORO_SETTINGS.focusTime * 60 : Infinity)) ? (
+            <Button variant="outline" size="icon" className="h-12 w-12 rounded-full" onClick={resetTimer}>
+              <RotateCcw className="h-5 w-5" />
+            </Button>
           ) : (
-            <div className="h-12 w-12"></div> // spacer
+            <div className="h-12 w-12" />
           )}
 
+          {/* Play/Pause button - fixed visibility with explicit colors */}
           <Button 
-            className={`h-16 w-16 rounded-full shadow-lg ${isRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-primary/90'}`}
+            className={`h-16 w-16 rounded-full shadow-lg border-2 ${
+              isRunning 
+                ? 'bg-amber-500 hover:bg-amber-600 border-amber-400 text-white' 
+                : 'bg-indigo-600 hover:bg-indigo-700 border-indigo-500 text-white'
+            }`}
             onClick={toggleTimer}
           >
-            {isRunning ? <Pause className="h-6 w-6 text-white" /> : <Play className="h-6 w-6 text-white translate-x-0.5" />}
+            {isRunning 
+              ? <Pause className="h-6 w-6" /> 
+              : <Play className="h-6 w-6 translate-x-0.5" />
+            }
           </Button>
 
+          {/* Stop/Save button */}
           {timerType === 'Manual' || pomoPhase === 'Focus' ? (
             <Button 
               variant="outline" 
               size="icon" 
-              className={`h-12 w-12 rounded-full transition-opacity ${totalElapsedInSession.current > 5 ? 'opacity-100 hover:text-rose-500' : 'opacity-30 cursor-not-allowed'}`}
+              className={`h-12 w-12 rounded-full transition-all ${
+                canStop 
+                  ? 'opacity-100 hover:text-rose-500 hover:border-rose-500 cursor-pointer' 
+                  : 'opacity-30 cursor-not-allowed'
+              }`}
               onClick={stopAndSave}
-              disabled={totalElapsedInSession.current <= 5}
+              disabled={!canStop}
               title="Stop and Save"
             >
               <Square className="h-5 w-5" />
             </Button>
           ) : (
-            <div className="h-12 w-12"></div> // spacer during break phase
+            <div className="h-12 w-12" />
           )}
         </div>
+
+        {/* Manual time entry toggle */}
+        {timerType === 'Manual' && !isRunning && (
+          <div className="pt-2 border-t border-border/50">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowManualInput(!showManualInput)}
+            >
+              + Log time manually (without timer)
+            </Button>
+
+            {showManualInput && (
+              <div className="mt-3 space-y-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+                <p className="text-xs text-muted-foreground font-medium">Enter time to log:</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Hours</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={manualHours}
+                      onChange={(e) => setManualHours(e.target.value)}
+                      className="h-8 text-center"
+                    />
+                  </div>
+                  <span className="text-lg font-bold mt-5">:</span>
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Minutes</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="59"
+                      value={manualMinutes}
+                      onChange={(e) => setManualMinutes(e.target.value)}
+                      className="h-8 text-center"
+                    />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  onClick={saveManualEntry}
+                  disabled={(parseInt(manualHours) || 0) === 0 && (parseInt(manualMinutes) || 0) < 1}
+                >
+                  Save Log
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
 
@@ -314,7 +392,6 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
           transition={{ duration: 0.8, ease: "easeInOut" }}
           className="fixed inset-0 z-[100] bg-background/95 flex flex-col items-center justify-center p-6 sm:p-12 overflow-hidden"
         >
-          {/* Abstract ambient light */}
           <motion.div 
             animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
             transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
@@ -327,7 +404,6 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
             transition={{ delay: 0.3, duration: 0.8, type: "spring" }}
             className="relative z-10 flex flex-col items-center w-full max-w-2xl"
           >
-            {/* Task Name & Phase */}
             <div className="text-center mb-12 space-y-3">
               <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-widest border border-white/10 ${activeText} bg-white/5 backdrop-blur-md`}>
                 {timerType === 'Pomodoro' ? `${pomoPhase} Phase` : 'Deep Work Mode'}
@@ -337,13 +413,12 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
               </h2>
             </div>
 
-            {/* Massive Circular Timer */}
             <div className="relative flex items-center justify-center mb-16 shadow-2xl rounded-full">
               <svg className="w-64 h-64 md:w-80 md:h-80 transform -rotate-90 drop-shadow-2xl">
                 <circle cx="50%" cy="50%" r="48%" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-muted/20" />
                 <motion.circle 
                   cx="50%" cy="50%" r="48%" stroke="currentColor" strokeWidth="6" fill="transparent"
-                  strokeDasharray={2 * Math.PI * 150} // Approximate radius for 80 units
+                  strokeDasharray={2 * Math.PI * 150}
                   strokeDashoffset={timerType === 'Pomodoro' ? `calc(${2 * Math.PI * 150} * (1 - ${progressPercent} / 100))` : 0}
                   className={`${activeText} transition-all duration-1000 ease-linear`}
                   style={timerType === 'Manual' ? { strokeDasharray: "4 12", animation: "spin 30s linear infinite" } : {}}
@@ -362,10 +437,14 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
               </div>
             </div>
 
-            {/* Controls */}
             <div className="flex gap-6 mb-16">
+              {/* Play/Pause in overlay - also fixed */}
               <Button 
-                className={`h-20 w-20 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all text-white border-2 border-white/10 ${isRunning ? 'bg-amber-500/80 hover:bg-amber-500 backdrop-blur-md' : 'bg-primary/90 hover:bg-primary'}`}
+                className={`h-20 w-20 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-all border-2 ${
+                  isRunning 
+                    ? 'bg-amber-500 hover:bg-amber-600 border-amber-400 text-white' 
+                    : 'bg-indigo-600 hover:bg-indigo-700 border-indigo-500 text-white'
+                }`}
                 onClick={toggleTimer}
               >
                 {isRunning ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8 translate-x-1" />}
@@ -374,26 +453,24 @@ export function ActiveTimer({ tasks, onSaveLog }: ActiveTimerProps) {
               {(timerType === 'Manual' || pomoPhase === 'Focus') && (
                 <Button 
                   variant="outline" 
-                  className={`h-20 w-20 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all bg-background/50 backdrop-blur-md border border-white/10 ${totalElapsedInSession.current > 5 ? 'hover:text-rose-500 hover:border-rose-500/50' : 'opacity-50 cursor-not-allowed'}`}
+                  className={`h-20 w-20 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all bg-background/50 backdrop-blur-md border border-white/10 ${canStop ? 'hover:text-rose-500 hover:border-rose-500/50' : 'opacity-50 cursor-not-allowed'}`}
                   onClick={() => {
-                     stopAndSave();
-                     setIsRunning(false); // Make sure overlay closes immediately
+                    stopAndSave();
+                    setIsRunning(false);
                   }}
-                  disabled={totalElapsedInSession.current <= 5}
+                  disabled={!canStop}
                 >
                   <Square className="h-8 w-8" />
                 </Button>
               )}
             </div>
 
-            {/* Quote */}
             <div className="text-center max-w-lg mx-auto opacity-80">
               <Quote className="h-6 w-6 mx-auto mb-3 opacity-50 text-muted-foreground" />
               <p className="text-lg md:text-xl font-medium font-heading italic text-muted-foreground leading-relaxed">
                 "{activeQuote}"
               </p>
             </div>
-
           </motion.div>
         </motion.div>
       )}
