@@ -121,3 +121,37 @@ export async function deleteHealthLog(id: string): Promise<void> {
     setLocalHealthLogs(logs);
   }
 }
+
+export async function getHealthGoals() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("health_goals")
+    .select("*")
+    .eq("user_id", user.id)
+    .single();
+
+  // Return defaults if no goals set yet
+  if (error || !data) {
+    return { sleep_hours_goal: 7, water_intake_goal: 2.5, steps_goal: 8000 };
+  }
+  return data;
+}
+
+export async function upsertHealthGoals(goals: {
+  sleep_hours_goal: number;
+  water_intake_goal: number;
+  steps_goal: number;
+}) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("health_goals")
+    .upsert({ ...goals, user_id: user.id }, { onConflict: "user_id" })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}

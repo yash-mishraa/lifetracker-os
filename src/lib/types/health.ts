@@ -1,3 +1,4 @@
+//health.ts
 export const MOOD_OPTIONS = ["Very happy", "Happy", "Neutral", "Stressed", "Sad"] as const;
 
 export type MoodOption = typeof MOOD_OPTIONS[number];

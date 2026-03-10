@@ -1,3 +1,5 @@
+//page.tsx
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,6 +16,8 @@ import { Moon, Dumbbell, Apple, HeartPulse, Plus, Activity, Droplets } from "luc
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getHealthGoals, upsertHealthGoals } from "@/lib/services/health-service";
+import { HealthGoalsDialog } from "@/components/health/health-goals-dialog";
 
 export default function HealthPage() {
   const [logs, setLogs] = useState<HealthLog[]>([]);
@@ -24,13 +28,19 @@ export default function HealthPage() {
   const [editingLog, setEditingLog] = useState<HealthLog | null>(null);
   
   const { toast } = useToast();
-  
+  const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
+const [healthGoals, setHealthGoals] = useState({ sleep_hours_goal: 7, water_intake_goal: 2.5, steps_goal: 8000 });
   const todayStr = new Date().toISOString().split("T")[0];
   const todayLog = logs.find((l) => l.date === todayStr);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+useEffect(() => {
+  async function init() {
+    const goals = await getHealthGoals();
+    setHealthGoals(goals);
+    await loadData();
+  }
+  init();
+}, []);
 
   async function loadData() {
     try {
@@ -107,10 +117,15 @@ export default function HealthPage() {
             )}
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog(todayLog || undefined)}>
-          <Plus className="mr-2 h-4 w-4" />
-          {todayLog ? "Edit Today" : "Log Today"}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setGoalsDialogOpen(true)}>
+            🎯 Set Goals
+          </Button>
+          <Button onClick={() => handleOpenDialog(todayLog || undefined)}>
+            <Plus className="mr-2 h-4 w-4" />
+            {todayLog ? "Edit Today" : "Log Today"}
+          </Button>
+        </div>
       </div>
 
       {/* Today's Summary */}
@@ -175,6 +190,13 @@ export default function HealthPage() {
         log={editingLog} 
         onSubmit={handleSubmit} 
       />
+      <HealthGoalsDialog
+  open={goalsDialogOpen}
+  onOpenChange={setGoalsDialogOpen}
+  currentGoals={healthGoals}
+  onSaved={setHealthGoals}
+/>
     </div>
   );
 }
+

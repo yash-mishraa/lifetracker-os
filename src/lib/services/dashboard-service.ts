@@ -1,6 +1,6 @@
 import { getTasks } from './task-service';
 import { getHabits, getHabitLogs } from './habit-service';
-import { getHealthLogs } from './health-service';
+import { getHealthLogs, getHealthGoals } from './health-service';
 import { getTimeLogs } from './time-service';
 import { getGoals } from './goal-service';
 import { Task } from '../types/task';
@@ -46,7 +46,8 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
     getHabitLogs(), // Fetches all, we filter locally
     getHealthLogs(),
     getTimeLogs(start, end),
-    getGoals()
+    getGoals(),
+    getHealthGoals()
   ]);
 
   // --- TASKS ---
@@ -82,16 +83,13 @@ const totalDueTodayCount = allDueToday.length;
 
   // --- HEALTH ---
   const todayHealthLog = healthLogs.find(l => l.date === todayStr) || null;
-  let loggedMetricsCount = 0;
-  if (todayHealthLog) {
-    if (todayHealthLog.sleep_hours !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.water_intake !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.weight !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.steps !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.calories !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.workout_done !== undefined) loggedMetricsCount++;
-    if (todayHealthLog.mood !== undefined) loggedMetricsCount++;
-  }
+let loggedMetricsCount = 0;
+if (todayHealthLog) {
+  if ((todayHealthLog.sleep_hours ?? 0) >= HealthGoals.sleep_hours_goal) loggedMetricsCount++;
+  if ((todayHealthLog.water_intake ?? 0) >= HealthGoals.water_intake_goal) loggedMetricsCount++;
+  if ((todayHealthLog.steps ?? 0) >= HealthGoals.steps_goal) loggedMetricsCount++;
+  if (todayHealthLog.workout_done) loggedMetricsCount++;
+}
 
   // --- TIME ---
   const focusSecondsToday = timeLogs.reduce((sum, log) => sum + log.duration_seconds, 0);
