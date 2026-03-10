@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 
 const CATEGORIES: GoalCategory[] = ['Career', 'Health', 'Learning', 'Finance', 'Personal'];
@@ -224,18 +225,20 @@ export default function GoalsPage() {
                   </Badge>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-[200px]">
-                <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {CATEGORIES.map((cat) => (
-                  <DropdownMenuCheckboxItem
-                    key={cat}
-                    checked={activeCategories.has(cat)}
-                    onCheckedChange={() => toggleCategoryFilter(cat)}
-                  >
-                    {cat}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
+  <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
+  <DropdownMenuSeparator />
+  <DropdownMenuGroup>  {/* 👈 wrap checkbox items */}
+    {CATEGORIES.map((cat) => (
+      <DropdownMenuCheckboxItem
+        key={cat}
+        checked={activeCategories.has(cat)}
+        onCheckedChange={() => toggleCategoryFilter(cat)}
+      >
+        {cat}
+      </DropdownMenuCheckboxItem>
+    ))}
+  </DropdownMenuGroup>
+</DropdownMenuContent>
             </DropdownMenu>
           </div>
 
