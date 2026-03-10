@@ -50,12 +50,12 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
   ]);
 
   // --- TASKS ---
-  const allDueToday = allTasks.filter(t => {
-    if (!t.deadline) return false;
-    const due = parseISO(t.deadline);
-    // Is due today OR is overdue and not completed
-    return isSameDay(due, today) || (due < today && t.status !== 'completed');
-  });
+const allDueToday = allTasks.filter(t => {
+  if (t.status === 'completed') return false;
+  if (!t.deadline) return true; // include tasks with no deadline
+  const due = parseISO(t.deadline);
+  return isSameDay(due, today) || due < today;
+});
   
   const completedTodayCount = allDueToday.filter(t => t.status === 'completed').length;
   const totalDueTodayCount = allDueToday.length;

@@ -136,17 +136,6 @@ export async function generateAutoSchedule(): Promise<TimeBlock[]> {
     });
   }
 
-  // Pre-fill fixed breaks (e.g., Lunch)
-  blocks.push({
-    id: `break-lunch`,
-    type: 'break',
-    title: 'Lunch Break & Reset',
-    energyLevel: 'Medium',
-    startTime: '12:00',
-    endTime: '13:00',
-    isLocked: true
-  });
-
   // Sort chronologically
   blocks.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
