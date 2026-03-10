@@ -83,7 +83,7 @@ export async function upsertHealthLog(data: HealthFormData): Promise<HealthLog> 
 
     const { data: result, error } = await supabase
       .from("health_logs")
-      .upsert(dbPayload, { onConflict: "date" })
+      .upsert(dbPayload, { onConflict: "user_id,date" })
       .select()
       .single();
       
