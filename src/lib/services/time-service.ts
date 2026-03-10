@@ -66,9 +66,12 @@ export async function saveTimeLog(formData: TimeLogFormData): Promise<TimeLog> {
   };
 
   if (isSupabaseConfigured() && supabase) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
     const { data, error } = await supabase
       .from('time_logs')
-      .insert([model])
+      .insert([{ ...model, user_id: user.id }])
       .select()
       .single();
       
