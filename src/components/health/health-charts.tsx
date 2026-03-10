@@ -118,15 +118,17 @@ calories: log?.calories ? Number(log.calories) : 0,
                   <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
                   <Tooltip content={<CustomTooltip />} />
                   <Area 
-                    type="monotone" 
-                    dataKey="sleep" 
-                    name="Sleep (hrs)" 
-                    stroke="#6366f1" 
-                    strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorSleep)" 
-                    connectNulls 
-                  />
+  type="monotone" 
+  dataKey="sleep" 
+  name="Sleep (hrs)" 
+  stroke="#6366f1" 
+  strokeWidth={2}
+  fillOpacity={1} 
+  fill="url(#colorSleep)" 
+  connectNulls
+  dot={{ r: 5, fill: "#6366f1", strokeWidth: 2, stroke: "white" }}
+  activeDot={{ r: 7 }}
+/>
                 </AreaChart>
               </ResponsiveContainer>
             </div>
