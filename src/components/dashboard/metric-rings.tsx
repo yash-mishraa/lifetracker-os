@@ -22,7 +22,7 @@ export function MetricRings({ summary }: MetricRingsProps) {
     : 100;
     
   // Cap health at 3 logs for 100% just as an example goal target
-  const healthPct = Math.min((summary.health.loggedMetricsCount / 3) * 100, 100);
+  const healthPct = Math.min((summary.health.loggedMetricsCount / 4) * 100, 100);
 
   const container: Variants = {
     hidden: { opacity: 0 },
@@ -118,7 +118,7 @@ export function MetricRings({ summary }: MetricRingsProps) {
           </div>
         </div>
         <div className="text-center z-10">
-          <div className="text-3xl font-heading font-bold tracking-tight text-emerald-500">{summary.health.loggedMetricsCount} <span className="text-xl text-muted-foreground font-semibold">/ 7</span></div>
+          <div className="text-3xl font-heading font-bold tracking-tight text-emerald-500">{summary.health.loggedMetricsCount} <span className="text-xl text-muted-foreground font-semibold">/ 4</span></div>
           <div className="text-sm text-muted-foreground font-medium mt-1">Health Logs</div>
         </div>
       </Card>
