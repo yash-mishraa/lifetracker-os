@@ -51,12 +51,16 @@ export async function getHealthLogByDate(date: string): Promise<HealthLog | null
 
 export async function upsertHealthLog(data: HealthFormData): Promise<HealthLog> {
   const now = new Date().toISOString();
-  
+
+
   // Clean up data
   const weightVal = data.weight === "" ? null : Number(data.weight);
   const moodVal = data.mood === "" ? null : data.mood;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
 
   const payload = {
+    user_id: user.id,
     date: data.date,
     sleep_hours: Number(data.sleep_hours) || 0,
     water_intake: Number(data.water_intake) || 0,
