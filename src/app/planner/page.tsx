@@ -110,6 +110,16 @@ export default function PlannerPage() {
     }
   }
 
+  async function handleDeleteBlock(id: string) {
+    const updatedSchedule = schedule.filter(b => b.id !== id);
+    setSchedule(updatedSchedule);
+    try {
+      await saveSchedule(updatedSchedule);
+    } catch (err: any) {
+      toast({ title: "Failed to delete block", description: err.message, variant: "destructive" });
+    }
+  }
+
   async function handleAddBlock() {
     if (!newBlock.title.trim()) {
       toast({ title: "Title is required", variant: "destructive" });
