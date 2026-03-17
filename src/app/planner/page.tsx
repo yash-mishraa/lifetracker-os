@@ -1,41 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DailyTimeline } from "@/components/planner/daily-timeline";
-import { getTodaySchedule, saveSchedule } from "@/lib/services/planner-service";
+import { getScheduleForDate, saveScheduleForDate } from "@/lib/services/planner-service";
 import { TimeBlock, BlockType, EnergyLevel } from "@/lib/types/planner";
 import { updateTask } from "@/lib/services/task-service";
 import { Button } from "@/components/ui/button";
-import { Calendar, Zap, Plus } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday,
+} from "date-fns";
 
 function generateId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -44,44 +34,140 @@ function generateId() {
 }
 
 const EMPTY_FORM = {
-  title: "",
-  description: "",
-  startTime: "09:00",
-  endTime: "10:00",
-  type: "task" as BlockType,
-  energyLevel: "Medium" as EnergyLevel,
-  isLocked: false,
+  title: "", description: "", startTime: "09:00", endTime: "10:00",
+  type: "task" as BlockType, energyLevel: "Medium" as EnergyLevel, isLocked: false,
 };
 
+// ─── Mini Calendar ────────────────────────────────────────────────────────────
+
+interface MiniCalendarProps {
+  selected: Date;
+  onSelect: (date: Date) => void;
+  scheduledDates: Set<string>;
+}
+
+function MiniCalendar({ selected, onSelect, scheduledDates }: MiniCalendarProps) {
+  const [viewMonth, setViewMonth] = useState(startOfMonth(selected));
+
+  const weeks: Date[][] = [];
+  const monthStart = startOfMonth(viewMonth);
+  const monthEnd = endOfMonth(viewMonth);
+  const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+
+  let day = calStart;
+  while (day <= calEnd) {
+    const week: Date[] = [];
+    for (let i = 0; i < 7; i++) { week.push(day); day = addDays(day, 1); }
+    weeks.push(week);
+  }
+
+  return (
+    <div className="select-none">
+      {/* Month nav */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          onClick={() => setViewMonth(subMonths(viewMonth, 1))}
+          className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-muted/60 transition-colors"
+        >
+          <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+        </button>
+        <span className="text-sm font-semibold tracking-tight">
+          {format(viewMonth, "MMMM yyyy")}
+        </span>
+        <button
+          onClick={() => setViewMonth(addMonths(viewMonth, 1))}
+          className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-muted/60 transition-colors"
+        >
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 mb-1">
+        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+          <div key={i} className="text-center text-[10px] font-medium text-muted-foreground/60 py-1">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Days grid */}
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {weeks.flat().map((d, i) => {
+          const dateStr = format(d, "yyyy-MM-dd");
+          const isSelected = isSameDay(d, selected);
+          const isCurrentMonth = isSameMonth(d, viewMonth);
+          const isTodayDate = isToday(d);
+          const hasBlocks = scheduledDates.has(dateStr);
+
+          return (
+            <button
+              key={i}
+              onClick={() => onSelect(d)}
+              className={[
+                "relative h-8 w-full flex items-center justify-center rounded-full text-xs font-medium transition-all",
+                !isCurrentMonth && "opacity-25",
+                isSelected
+                  ? "bg-foreground text-background"
+                  : isTodayDate
+                  ? "text-indigo-500 font-bold"
+                  : "hover:bg-muted/60 text-foreground",
+              ].filter(Boolean).join(" ")}
+            >
+              {format(d, "d")}
+              {hasBlocks && !isSelected && (
+                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-indigo-400" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function PlannerPage() {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [schedule, setSchedule] = useState<TimeBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [scheduledDates, setScheduledDates] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadSchedule();
-  }, []);
-
-  async function loadSchedule() {
+  const loadSchedule = useCallback(async (date: Date) => {
     setLoading(true);
     try {
-      const blocks = await getTodaySchedule();
+      const blocks = await getScheduleForDate(date);
       setSchedule(blocks);
     } catch (err: any) {
       toast({ title: "Failed to load schedule", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
 
-  async function persistSchedule(blocks: TimeBlock[]) {
+  useEffect(() => { loadSchedule(selectedDate); }, [selectedDate, loadSchedule]);
+
+  // Track which dates have blocks (for calendar dots)
+  useEffect(() => {
+    if (schedule.length > 0) {
+      setScheduledDates(prev => new Set([...prev, format(selectedDate, "yyyy-MM-dd")]));
+    }
+  }, [schedule, selectedDate]);
+
+  async function persistSchedule(blocks: TimeBlock[], date: Date = selectedDate) {
     setSchedule(blocks);
     try {
-      await saveSchedule(blocks);
+      await saveScheduleForDate(date, blocks);
+      if (blocks.length > 0) {
+        setScheduledDates(prev => new Set([...prev, format(date, "yyyy-MM-dd")]));
+      }
     } catch (err) {
       console.error("Failed to save schedule", err);
     }
@@ -96,12 +182,9 @@ export default function PlannerPage() {
   function openEdit(block: TimeBlock) {
     setEditingBlock(block);
     setForm({
-      title: block.title,
-      description: block.description ?? "",
-      startTime: block.startTime,
-      endTime: block.endTime,
-      type: block.type,
-      energyLevel: block.energyLevel ?? "Medium",
+      title: block.title, description: block.description ?? "",
+      startTime: block.startTime, endTime: block.endTime,
+      type: block.type, energyLevel: block.energyLevel ?? "Medium",
       isLocked: block.isLocked ?? false,
     });
     setShowDialog(true);
@@ -112,26 +195,19 @@ export default function PlannerPage() {
       toast({ title: "Title is required", variant: "destructive" });
       return;
     }
-
     if (editingBlock) {
-      const updated = schedule.map(b =>
-        b.id === editingBlock.id
-          ? { ...b, ...form, description: form.description || undefined }
-          : b
-      );
-      await persistSchedule(updated);
+      await persistSchedule(schedule.map(b =>
+        b.id === editingBlock.id ? { ...b, ...form, description: form.description || undefined } : b
+      ));
       toast({ title: "Block updated." });
     } else {
       const block: TimeBlock = {
-        id: generateId(),
-        ...form,
-        description: form.description || undefined,
-        isCompleted: false,
+        id: generateId(), ...form,
+        description: form.description || undefined, isCompleted: false,
       };
       await persistSchedule([...schedule, block]);
       toast({ title: "Block added." });
     }
-
     setShowDialog(false);
   }
 
@@ -144,7 +220,6 @@ export default function PlannerPage() {
   async function handleToggleComplete(id: string, isCompleted: boolean) {
     const updated = schedule.map(b => b.id === id ? { ...b, isCompleted } : b);
     setSchedule(updated);
-
     const block = schedule.find(b => b.id === id);
     if (block?.sourceId && block.type === "task") {
       try {
@@ -155,27 +230,24 @@ export default function PlannerPage() {
         return;
       }
     }
-
-    try {
-      await saveSchedule(updated);
-      if (isCompleted) toast({ title: "Marked as complete!" });
-    } catch (err) {
-      console.error("Failed to save", err);
-    }
+    try { await saveScheduleForDate(selectedDate, updated); } catch {}
+    if (isCompleted) toast({ title: "Marked as complete!" });
   }
 
+  const isSelectedToday = isToday(selectedDate);
+  const dateLabel = isSelectedToday
+    ? "Today"
+    : format(selectedDate, "EEEE, MMMM d");
+
   return (
-    <div className="p-6 md:p-12 space-y-8 max-w-7xl mx-auto">
+    <div className="p-6 md:p-10 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-6">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight py-1 bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 bg-clip-text text-transparent">
-            Daily Planner
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/50 pb-6 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-500 to-purple-500 bg-clip-text text-transparent">
+            Planner
           </h1>
-          <p className="text-muted-foreground flex items-center gap-2">
-            <Zap className="h-4 w-4 text-amber-500" />
-            Plan your day, block by block.
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">Plan your days, block by block.</p>
         </div>
         <Button
           onClick={openAdd}
@@ -187,83 +259,96 @@ export default function PlannerPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_300px] gap-8 items-start">
-        {/* Main Timeline */}
-        <div className="bg-card/30 border rounded-xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 border-b pb-4 mb-4">
-            <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Calendar className="h-5 w-5" />
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8 items-start">
+        {/* ── Left: Calendar + legend ── */}
+        <div className="space-y-5">
+          {/* Calendar card */}
+          <div className="bg-card border rounded-2xl p-5 shadow-sm">
+            <MiniCalendar
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              scheduledDates={scheduledDates}
+            />
+          </div>
+
+          {/* Quick-jump */}
+          {!isSelectedToday && (
+            <button
+              onClick={() => setSelectedDate(new Date())}
+              className="w-full text-xs text-indigo-400 hover:text-indigo-300 transition-colors py-1"
+            >
+              Jump to today
+            </button>
+          )}
+
+          {/* Legend */}
+          <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Block types</p>
+            {[
+              { color: "bg-blue-500", label: "Task" },
+              { color: "bg-orange-500", label: "Habit" },
+              { color: "bg-purple-500", label: "Focus" },
+              { color: "bg-green-500", label: "Break" },
+            ].map(({ color, label }) => (
+              <div key={label} className="flex items-center gap-2.5">
+                <span className={`h-2 w-2 rounded-full ${color}`} />
+                <span className="text-xs text-muted-foreground">{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Right: Timeline ── */}
+        <div className="bg-card/30 border rounded-2xl p-6 shadow-sm min-h-[500px]">
+          {/* Day header */}
+          <div className="flex items-center justify-between mb-6 pb-4 border-b">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSelectedDate(d => addDays(d, -1))}
+                className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted/60 transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+              </button>
+              <div>
+                <h2 className="text-lg font-semibold leading-tight">{dateLabel}</h2>
+                {!isSelectedToday && (
+                  <p className="text-xs text-muted-foreground">{format(selectedDate, "yyyy")}</p>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedDate(d => addDays(d, 1))}
+                className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted/60 transition-colors"
+              >
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </button>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold">Today's Timeline</h2>
-              <p className="text-sm text-muted-foreground">Drag to reorder · click pencil to edit</p>
-            </div>
+            <span className="text-xs text-muted-foreground">
+              {schedule.length} {schedule.length === 1 ? "block" : "blocks"}
+            </span>
           </div>
 
           {loading ? (
             <div className="space-y-4">
-              {[1, 2, 3, 4].map(idx => (
-                <Skeleton key={idx} className="h-20 w-full rounded-xl" />
-              ))}
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
             </div>
           ) : schedule.length === 0 ? (
-            <div className="h-[200px] flex flex-col items-center justify-center text-center p-6 border border-dashed rounded-lg bg-muted/20">
-              <p className="text-muted-foreground mb-4">Nothing scheduled for today yet.</p>
+            <div className="h-[300px] flex flex-col items-center justify-center text-center gap-3 border border-dashed rounded-xl bg-muted/10">
+              <p className="text-sm text-muted-foreground">
+                {isSelectedToday ? "Nothing planned for today." : `Nothing planned for ${format(selectedDate, "MMM d")}.`}
+              </p>
               <Button onClick={openAdd} variant="outline" size="sm">
-                <Plus className="mr-1 h-3 w-3" /> Add your first block
+                <Plus className="mr-1 h-3 w-3" /> Add first block
               </Button>
             </div>
           ) : (
-            <div className="min-h-[400px]">
-              <DailyTimeline
-                initialBlocks={schedule}
-                onScheduleChange={persistSchedule}
-                onToggleComplete={handleToggleComplete}
-                onEdit={openEdit}
-                onDelete={(id) => setDeleteId(id)}
-              />
-            </div>
+            <DailyTimeline
+              initialBlocks={schedule}
+              onScheduleChange={(blocks) => persistSchedule(blocks)}
+              onToggleComplete={handleToggleComplete}
+              onEdit={openEdit}
+              onDelete={(id) => setDeleteId(id)}
+            />
           )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          <div className="bg-card/50 border rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold mb-3 tracking-wide uppercase text-muted-foreground">Energy Map</h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-start gap-3">
-                <div className="h-3 w-3 rounded-full bg-blue-500 mt-1 shrink-0 ring-4 ring-blue-500/20" />
-                <div>
-                  <p className="font-medium text-blue-500">High Energy</p>
-                  <p className="text-muted-foreground text-xs">Deep work, complex tasks, high priority items.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="h-3 w-3 rounded-full bg-indigo-500 mt-1 shrink-0 ring-4 ring-indigo-500/20" />
-                <div>
-                  <p className="font-medium text-indigo-500">Medium Energy</p>
-                  <p className="text-muted-foreground text-xs">Meetings, admin, medium priority tasks.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="h-3 w-3 rounded-full bg-slate-500 mt-1 shrink-0 ring-4 ring-slate-500/20" />
-                <div>
-                  <p className="font-medium text-slate-500">Low Energy</p>
-                  <p className="text-muted-foreground text-xs">Habits, reading, light tasks.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card/50 border rounded-xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold mb-3 tracking-wide uppercase text-muted-foreground">Block Types</h3>
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-blue-500" /> Task — actionable to-dos</div>
-              <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-500" /> Habit — recurring behaviours</div>
-              <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-purple-500" /> Focus — deep work sessions</div>
-              <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-green-500" /> Break — rest & recovery</div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -271,54 +356,38 @@ export default function PlannerPage() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingBlock ? "Edit Block" : "Add Time Block"}</DialogTitle>
+            <DialogTitle>{editingBlock ? "Edit Block" : "Add Block"}</DialogTitle>
+            <p className="text-xs text-muted-foreground pt-1">{format(selectedDate, "EEEE, MMMM d")}</p>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-1">
             <div className="space-y-1.5">
-              <Label htmlFor="block-title">Title</Label>
+              <Label>Title</Label>
               <Input
-                id="block-title"
                 placeholder="e.g. Deep work session"
                 value={form.title}
                 onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
                 onKeyDown={e => e.key === "Enter" && handleSave()}
               />
             </div>
-
             <div className="space-y-1.5">
-              <Label htmlFor="block-desc">
-                Description <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
+              <Label>Description <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Textarea
-                id="block-desc"
                 placeholder="Add notes..."
                 rows={2}
                 value={form.description}
                 onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
               />
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="start-time">Start Time</Label>
-                <Input
-                  id="start-time"
-                  type="time"
-                  value={form.startTime}
-                  onChange={e => setForm(p => ({ ...p, startTime: e.target.value }))}
-                />
+                <Label>Start</Label>
+                <Input type="time" value={form.startTime} onChange={e => setForm(p => ({ ...p, startTime: e.target.value }))} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="end-time">End Time</Label>
-                <Input
-                  id="end-time"
-                  type="time"
-                  value={form.endTime}
-                  onChange={e => setForm(p => ({ ...p, endTime: e.target.value }))}
-                />
+                <Label>End</Label>
+                <Input type="time" value={form.endTime} onChange={e => setForm(p => ({ ...p, endTime: e.target.value }))} />
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Type</Label>
@@ -333,7 +402,7 @@ export default function PlannerPage() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Energy Level</Label>
+                <Label>Energy</Label>
                 <Select value={form.energyLevel} onValueChange={val => setForm(p => ({ ...p, energyLevel: val as EnergyLevel }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -359,9 +428,7 @@ export default function PlannerPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this block?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove the block from today's schedule.
-            </AlertDialogDescription>
+            <AlertDialogDescription>This will remove the block from {isSelectedToday ? "today's" : format(selectedDate, "MMM d's")} schedule.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
