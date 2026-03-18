@@ -71,6 +71,142 @@ function AnimatedBackground() {
   );
 }
 
+// ── useInView helper
+function useInView(threshold = 0.2) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return { ref, inView };
+}
+
+const STEPS = [
+  {
+    num: "01",
+    title: "Add your tasks & plan your day",
+    desc: "Create tasks with priority, deadlines and time estimates. Drop them into the planner as time blocks — the two stay in sync automatically. Complete a block, the task is done.",
+    accent: "from-blue-500/20 to-transparent",
+    dot: "bg-blue-500",
+    detail: ["Drag-to-reorder timeline", "Auto-creates tasks from blocks", "Calendar view for future days"],
+  },
+  {
+    num: "02",
+    title: "Build habits that actually stick",
+    desc: "Set daily or custom-schedule habits. Track streaks, see your monthly heatmap, and let the dashboard show you whether you're consistent or slipping.",
+    accent: "from-orange-500/20 to-transparent",
+    dot: "bg-orange-500",
+    detail: ["Streak tracking with history", "Completion rings on dashboard", "Reminder times per habit"],
+  },
+  {
+    num: "03",
+    title: "Log your health, effortlessly",
+    desc: "One tap to log sleep, water, steps and workouts. Charts show trends over 7 or 14 days. Goals adjust the scoring so you hit targets that matter to you.",
+    accent: "from-emerald-500/20 to-transparent",
+    dot: "bg-emerald-500",
+    detail: ["Sleep, water, steps, workout", "14-day trend charts", "Custom goal thresholds"],
+  },
+  {
+    num: "04",
+    title: "Set goals, track milestones",
+    desc: "Long-term goals broken into milestones. Progress rings show how close you are. The discipline score ties everything together into a single daily number.",
+    accent: "from-purple-500/20 to-transparent",
+    dot: "bg-purple-500",
+    detail: ["Milestone-based progress", "Category filters", "Discipline score (0–100)"],
+  },
+];
+
+function StepCard({ step, index }: { step: typeof STEPS[0]; index: number }) {
+  const { ref, inView } = useInView(0.15);
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 40, filter: "blur(8px)" }}
+      animate={inView ? { opacity: 1, y: 0, filter: "blur(0px)" } : {}}
+      transition={{ duration: 0.7, ease, delay: index * 0.1 }}
+      className="group relative"
+    >
+      {/* Connector line */}
+      {index < STEPS.length - 1 && (
+        <div className="hidden lg:block absolute top-8 left-[calc(50%+2rem)] w-full h-px bg-white/[0.04]" />
+      )}
+
+      <div className={`relative bg-gradient-to-br ${step.accent} border border-white/[0.06] rounded-2xl p-7 h-full transition-all duration-500 group-hover:border-white/[0.1] group-hover:bg-white/[0.03]`}>
+        {/* Step number */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className={`h-2 w-2 rounded-full ${step.dot} shadow-[0_0_8px_currentColor]`} />
+          <span className="text-[11px] tracking-[0.15em] text-white/20 font-medium uppercase">{step.num}</span>
+        </div>
+
+        {/* Title */}
+        <h3 className="text-[1.05rem] font-semibold tracking-[-0.02em] text-white/85 leading-snug mb-3">
+          {step.title}
+        </h3>
+
+        {/* Description */}
+        <p className="text-[13px] text-white/35 leading-relaxed mb-5">
+          {step.desc}
+        </p>
+
+        {/* Detail list */}
+        <ul className="space-y-2">
+          {step.detail.map((d, i) => (
+            <li key={i} className="flex items-center gap-2 text-[12px] text-white/25">
+              <span className="h-px w-3 bg-white/20 shrink-0" />
+              {d}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </motion.div>
+  );
+}
+
+function HowItWorks() {
+  const { ref, inView } = useInView(0.1);
+  return (
+    <section id="how-it-works" className="relative z-20 px-8 md:px-14 py-24">
+      {/* Section header */}
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 20 }}
+        animate={inView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.6, ease }}
+        className="text-center mb-16"
+      >
+        <p className="text-[11px] tracking-[0.2em] uppercase text-white/20 mb-3">How it works</p>
+        <h2 className="text-[2.2rem] md:text-[3rem] font-semibold tracking-[-0.03em] text-white/80 leading-tight max-w-xl mx-auto">
+          Everything connected.<br />
+          <span className="text-white/25">Nothing left out.</span>
+        </h2>
+      </motion.div>
+
+      {/* Steps grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-w-7xl mx-auto">
+        {STEPS.map((step, i) => (
+          <StepCard key={i} step={step} index={i} />
+        ))}
+      </div>
+
+      {/* Bottom CTA */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={inView ? { opacity: 1 } : {}}
+        transition={{ duration: 0.6, ease, delay: 0.6 }}
+        className="text-center mt-14"
+      >
+        <Link href="/login"
+          className="inline-flex items-center gap-2 bg-white text-black text-[14px] font-medium px-8 py-3.5 rounded-full hover:bg-white/90 transition-all shadow-[0_0_40px_rgba(255,255,255,0.08)]">
+          Start building your system
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </motion.div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -96,15 +232,7 @@ export default function LandingPage() {
           <p className="text-[9px] tracking-[0.2em] uppercase text-white/20 mt-[1px] ml-[1px]">Tracker</p>
         </div>
 
-        {/* Nav links */}
-        <div className="hidden md:flex items-center gap-8 text-[13px] text-white/40">
-          {["Features", "Pricing", "Changelog"].map(label => (
-            <a key={label} href="#"
-              className="hover:text-white/80 transition-colors duration-200">
-              {label}
-            </a>
-          ))}
-        </div>
+        {/* Nav links — removed */}
 
         {/* CTA */}
         <div className="flex items-center gap-3">
@@ -177,7 +305,7 @@ export default function LandingPage() {
             Start for free
             <ArrowRight className="h-4 w-4" />
           </Link>
-          <a href="#features"
+          <a href="#how-it-works"
             className="text-[14px] text-white/35 hover:text-white/60 transition-colors px-4 py-3.5">
             See how it works →
           </a>
@@ -193,6 +321,9 @@ export default function LandingPage() {
           Built for people who take their days seriously.
         </motion.p>
       </div>
+
+      {/* ── How it works ── */}
+      <HowItWorks />
 
       {/* ── Feature strip ── */}
       <motion.div
