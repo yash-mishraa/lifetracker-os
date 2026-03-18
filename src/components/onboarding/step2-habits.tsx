@@ -1,3 +1,5 @@
+//src/components/onboarding/step2-habits.tsx
+
 "use client";
 
 import { CheckCircle2 } from "lucide-react";

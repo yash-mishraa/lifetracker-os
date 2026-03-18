@@ -1,3 +1,5 @@
+//src/components/onboarding/step5-reminders.tsx
+
 "use client";
 
 import { BellRing, BellOff } from "lucide-react";

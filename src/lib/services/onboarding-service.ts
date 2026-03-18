@@ -1,3 +1,5 @@
+// src/lib/services/onboarding-service.ts
+
 export const ONBOARDING_KEY = "lifeos_onboarding_completed";
 
 export function hasCompletedOnboarding(userId: string): boolean {

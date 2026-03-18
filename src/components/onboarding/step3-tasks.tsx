@@ -1,3 +1,5 @@
+//src/components/onboarding/step3-tasks.tsx
+
 "use client";
 
 import { useState } from "react";

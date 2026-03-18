@@ -1,3 +1,5 @@
+//src/components/onboarding-provider.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";

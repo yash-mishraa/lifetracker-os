@@ -1,3 +1,5 @@
+//src/components/onboarding/step4-focus.tsx
+
 "use client";
 
 import { Target } from "lucide-react";
