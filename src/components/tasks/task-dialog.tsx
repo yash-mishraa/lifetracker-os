@@ -1,5 +1,3 @@
-//src/components/tasks/task-dialog.tsx
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -54,6 +52,9 @@ export function TaskDialog({
 }: TaskDialogProps) {
   const [form, setForm] = useState<TaskFormData>(DEFAULT_TASK_FORM);
   const [tagInput, setTagInput] = useState("");
+  // start/end time are UI-only — we store start as deadline and duration as estimated_minutes
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("10:00");
 
   const isEditing = !!task;
 
@@ -73,16 +74,44 @@ export function TaskDialog({
         parent_task_id: task.parent_task_id || "",
         recurrence: task.recurrence,
       });
+      // Derive start/end from stored values
+      if (task.deadline) {
+        const d = new Date(task.deadline);
+        setStartTime(`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`);
+        const endMins = d.getHours() * 60 + d.getMinutes() + (task.estimated_minutes || 60);
+        setEndTime(`${String(Math.floor(endMins/60)).padStart(2,"0")}:${String(endMins%60).padStart(2,"0")}`);
+      } else {
+        setStartTime("09:00");
+        setEndTime("10:00");
+      }
     } else {
       setForm(DEFAULT_TASK_FORM);
+      setStartTime("09:00");
+      setEndTime("10:00");
     }
     setTagInput("");
   }, [task, open]);
 
+  // Auto-calc estimated_minutes whenever start/end changes
+  useEffect(() => {
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    const diff = (eh * 60 + em) - (sh * 60 + sm);
+    if (diff > 0) setForm(f => ({ ...f, estimated_minutes: diff }));
+  }, [startTime, endTime]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) return;
-    onSubmit(form);
+    // Build a today-based deadline from startTime for scheduling purposes
+    const today = new Date();
+    const [sh, sm] = startTime.split(":").map(Number);
+    today.setHours(sh, sm, 0, 0);
+    const finalForm: TaskFormData = {
+      ...form,
+      deadline: today.toISOString().slice(0, 16),
+    };
+    onSubmit(finalForm);
     onOpenChange(false);
   };
 
@@ -99,10 +128,7 @@ export function TaskDialog({
   };
 
   const handleTagKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addTag();
-    }
+    if (e.key === "Enter") { e.preventDefault(); addTag(); }
   };
 
   return (
@@ -111,9 +137,7 @@ export function TaskDialog({
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Task" : "New Task"}</DialogTitle>
           <DialogDescription>
-            {isEditing
-              ? "Update the task details below."
-              : "Fill in the details to create a new task."}
+            {isEditing ? "Update the task details below." : "Fill in the details to create a new task."}
           </DialogDescription>
         </DialogHeader>
 
@@ -125,9 +149,7 @@ export function TaskDialog({
               id="task-title"
               placeholder="What needs to be done?"
               value={form.title}
-              onChange={(e) =>
-                setForm({ ...form, title: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
               required
             />
           </div>
@@ -139,33 +161,25 @@ export function TaskDialog({
               id="task-desc"
               placeholder="Add details..."
               value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              rows={3}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
             />
           </div>
 
-          {/* Priority & Status row */}
+          {/* Priority & Status */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Priority</Label>
               <Select
                 value={form.priority}
-                onValueChange={(val) =>
-                  setForm({ ...form, priority: (val as Priority) || "medium" })
-                }
+                onValueChange={(val) => setForm({ ...form, priority: (val as Priority) || "medium" })}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(Object.keys(PRIORITY_CONFIG) as Priority[]).map((p) => (
                     <SelectItem key={p} value={p}>
                       <span className="flex items-center gap-2">
-                        <span
-                          className={`h-2 w-2 rounded-full ${PRIORITY_CONFIG[p].dotColor}`}
-                        />
+                        <span className={`h-2 w-2 rounded-full ${PRIORITY_CONFIG[p].dotColor}`} />
                         {PRIORITY_CONFIG[p].label}
                       </span>
                     </SelectItem>
@@ -177,79 +191,62 @@ export function TaskDialog({
               <Label>Status</Label>
               <Select
                 value={form.status}
-                onValueChange={(val) =>
-                  setForm({ ...form, status: (val as TaskStatus) || "todo" })
-                }
+                onValueChange={(val) => setForm({ ...form, status: (val as TaskStatus) || "todo" })}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(Object.keys(STATUS_CONFIG) as TaskStatus[]).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {STATUS_CONFIG[s].label}
-                    </SelectItem>
+                    <SelectItem key={s} value={s}>{STATUS_CONFIG[s].label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {/* Deadline & Estimated time */}
+          {/* Start & End Time */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="task-deadline">Deadline</Label>
+              <Label htmlFor="start-time">Start Time</Label>
               <Input
-                id="task-deadline"
-                type="datetime-local"
-                value={form.deadline}
-                onChange={(e) =>
-                  setForm({ ...form, deadline: e.target.value })
-                }
+                id="start-time"
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="task-est">Est. Time (min)</Label>
+              <Label htmlFor="end-time">End Time</Label>
               <Input
-                id="task-est"
-                type="number"
-                min={0}
-                value={form.estimated_minutes || ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    estimated_minutes: parseInt(e.target.value) || 0,
-                  })
-                }
+                id="end-time"
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
               />
             </div>
           </div>
+          {form.estimated_minutes > 0 && (
+            <p className="text-[11px] text-muted-foreground -mt-2">
+              Duration: {form.estimated_minutes} min
+            </p>
+          )}
 
           {/* Project & Recurrence */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Project</Label>
               <Select
-                value={form.project_id || "__none__"}
-                onValueChange={(val) =>
-                  setForm({
-                    ...form,
-                    project_id: !val || val === "__none__" ? "" : val,
-                  })
-                }
+                value={(form.project_id ?? "") || "none"}
+                onValueChange={(val) => setForm({ ...form, project_id: val === "none" ? "" : (val ?? "") })}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select project" />
+                  <SelectValue placeholder="No Project" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">No Project</SelectItem>
+                  <SelectItem value="none">No Project</SelectItem>
                   {(projects || []).map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       <span className="flex items-center gap-2">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: p.color }}
-                        />
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
                         {p.name}
                       </span>
                     </SelectItem>
@@ -261,18 +258,12 @@ export function TaskDialog({
               <Label>Recurrence</Label>
               <Select
                 value={form.recurrence}
-                onValueChange={(val) =>
-                  setForm({ ...form, recurrence: (val as Recurrence) || "none" })
-                }
+                onValueChange={(val) => setForm({ ...form, recurrence: (val as Recurrence) || "none" })}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {RECURRENCE_OPTIONS.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -289,24 +280,14 @@ export function TaskDialog({
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
               />
-              <Button type="button" variant="outline" size="sm" onClick={addTag}>
-                Add
-              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={addTag}>Add</Button>
             </div>
             {form.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {form.tags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="text-xs gap-1 pl-2 pr-1"
-                  >
+                  <Badge key={tag} variant="secondary" className="text-xs gap-1 pl-2 pr-1">
                     {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(tag)}
-                      className="hover:text-foreground ml-0.5"
-                    >
+                    <button type="button" onClick={() => removeTag(tag)} className="hover:text-foreground ml-0.5">
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
@@ -316,9 +297,7 @@ export function TaskDialog({
           </div>
 
           <DialogFooter>
-            <Button type="submit">
-              {isEditing ? "Save Changes" : "Create Task"}
-            </Button>
+            <Button type="submit">{isEditing ? "Save Changes" : "Create Task"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
