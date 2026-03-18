@@ -1,5 +1,7 @@
-"use client";
+//src
 
+"use client";
+import { PageClock } from "@/components/ui/page-clock";
 import { useEffect, useState, useCallback } from "react";
 
 // ── Planner ──────────────────────────────────────────────────────────────────
@@ -551,6 +553,7 @@ export default function PlanPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Your tasks and daily schedule, unified.</p>
         </div>
+        <PageClock />
         <div className="flex items-center bg-muted/40 border rounded-xl p-1 gap-1">
           {(["planner", "tasks"] as TopTab[]).map(tab => (
             <button key={tab} onClick={() => setTopTab(tab)}

@@ -1,5 +1,7 @@
-"use client";
+//src/app/records/page.tsx
 
+"use client";
+import { PageClock } from "@/components/ui/page-clock";
 import { useEffect, useState } from "react";
 import { PersonalRecord } from "@/lib/types/records";
 import { getPersonalRecords } from "@/lib/services/records-service";
@@ -36,7 +38,7 @@ export default function RecordsPage() {
           <Trophy className="h-4 w-4 text-amber-500" />
         </p>
       </div>
-
+      <PageClock />
       {loading ? (
         <div className="py-24 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

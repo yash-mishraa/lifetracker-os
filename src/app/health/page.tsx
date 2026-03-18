@@ -1,4 +1,4 @@
-//page.tsx
+//src/app/health/page.tsx
 
 "use client";
 
@@ -18,7 +18,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getHealthGoals, upsertHealthGoals } from "@/lib/services/health-service";
 import { HealthGoalsDialog } from "@/components/health/health-goals-dialog";
-
+import { PageClock } from "@/components/ui/page-clock";
 export default function HealthPage() {
   const [logs, setLogs] = useState<HealthLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,6 +118,7 @@ useEffect(() => {
           </p>
         </div>
         <div className="flex gap-2">
+          <PageClock />
           <Button variant="outline" onClick={() => setGoalsDialogOpen(true)}>
             🎯 Set Goals
           </Button>

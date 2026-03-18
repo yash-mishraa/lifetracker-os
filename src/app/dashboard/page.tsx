@@ -1,3 +1,5 @@
+//src/app/dashboard/page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,6 +16,8 @@ import { ConsistencyScoreCard } from "@/components/dashboard/consistency-score-c
 import { StreaksShowcase } from "@/components/dashboard/streaks-showcase";
 import { AchievementsGrid } from "@/components/dashboard/achievements-grid";
 import { DisciplineScoreCard } from "@/components/dashboard/discipline-score-card";
+import { ClockWidget } from "@/components/dashboard/clock-widget";
+import { PageClock } from "@/components/ui/page-clock";
 import { getDisciplineHistory } from "@/lib/services/discipline-service";
 import { DisciplineHistory } from "@/lib/types/discipline";
 import { useToast } from "@/components/ui/use-toast";
@@ -48,12 +52,19 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 md:p-12 space-y-8 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Today</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">Today</h1>
+          </div>
           <p className="text-muted-foreground">Your command center for the day.</p>
         </div>
-        <div className="pt-1"><QuickActions onActionComplete={loadDashboard} /></div>
+        <div className="flex items-center gap-4 pt-1">
+          <PageClock />
+          <QuickActions onActionComplete={loadDashboard} />
+        </div>
       </div>
 
       {loading ? (
@@ -69,16 +80,26 @@ export default function DashboardPage() {
       ) : summary ? (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
+          {/* Top Row: Metric Rings + Clock Widget */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-3"><MetricRings summary={summary} /></div>
-            <div className="lg:col-span-1 min-h-[350px]">
-              {discipline && <DisciplineScoreCard data={discipline} />}
+            <div className="lg:col-span-1">
+              <ClockWidget />
             </div>
           </div>
 
+          {/* Discipline Score — full width strip */}
+          {discipline && (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-4">
+                <DisciplineScoreCard data={discipline} />
+              </div>
+            </div>
+          )}
+
+          {/* Plan + Habits */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 min-h-[380px]">
-              {/* onDataChange triggers loadDashboard so Work Done card updates immediately */}
               <TodaysPlan onDataChange={loadDashboard} />
             </div>
             <div className="lg:col-span-1">
@@ -89,6 +110,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Work Done + Goals */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
               <FocusSummaryCard
@@ -104,6 +126,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Gamification */}
           {gamification && (
             <>
               <div className="border-t pt-8">

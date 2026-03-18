@@ -1,5 +1,7 @@
-"use client";
+//src/app/review/page.tsx
 
+"use client";
+import { PageClock } from "@/components/ui/page-clock";
 import { useEffect, useState } from "react";
 import { WeeklyMetricsSummary } from "@/components/review/weekly-metrics-summary";
 import { ReflectionForm } from "@/components/review/reflection-form";
@@ -94,6 +96,7 @@ export default function WeeklyReviewPage() {
               </span>
             )}
           </p>
+          <PageClock />
         </div>
       </div>
 

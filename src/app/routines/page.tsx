@@ -1,5 +1,5 @@
 "use client";
-
+import { PageClock } from "@/components/ui/page-clock";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Routine } from "@/lib/types/routine";
@@ -60,6 +60,7 @@ export default function RoutinesPage() {
             Build unshakeable daily momentum.
             <Sparkles className="h-4 w-4 text-amber-500" />
           </p>
+          <PageClock />
         </div>
         <RoutineManagerDialog onSaved={loadRoutines}>
           <Button>Create Routine</Button>

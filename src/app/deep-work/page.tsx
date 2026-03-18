@@ -1,3 +1,5 @@
+//src/app/deep-work/page.tsx
+
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -8,7 +10,7 @@ import { Task } from "@/lib/types/task";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Play, Pause, Square, X, RefreshCcw } from "lucide-react";
-
+import { PageClock } from "@/components/ui/page-clock";
 const MOTIVATIONAL_QUOTES = [
   "Focus is the art of knowing what to ignore.",
   "Deep work is the superpower of the 21st century.",

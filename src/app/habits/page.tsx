@@ -1,5 +1,7 @@
-"use client";
+//src/app/habits/page.tsx
 
+"use client";
+import { PageClock } from "@/components/ui/page-clock";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Habit, HabitLog, HabitFormData, HabitStats } from "@/lib/types/habit";
 import {
@@ -154,6 +156,7 @@ export default function HabitsPage() {
             Build positive routines and track your consistency.
           </p>
         </div>
+        <PageClock />
         <Button 
           size="sm" 
           onClick={() => {

@@ -1,5 +1,7 @@
-"use client";
+//src/app/goals/page.tsx
 
+"use client";
+import { PageClock } from "@/components/ui/page-clock";
 import { useEffect, useState } from "react";
 import { 
   getGoals, 
@@ -182,6 +184,7 @@ export default function GoalsPage() {
             )}
           </p>
         </div>
+        <PageClock />
         <Button onClick={() => handleOpenGoalDialog()}>
           <Plus className="mr-2 h-4 w-4" />
           Create Goal

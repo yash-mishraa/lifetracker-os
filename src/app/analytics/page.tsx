@@ -1,5 +1,7 @@
+//src/app/analytics/page.tsx
 "use client";
 
+import { PageClock } from "@/components/ui/page-clock";
 import { useEffect, useState } from "react";
 import { getAnalyticsData, AnalyticsData } from "@/lib/services/analytics-service";
 import { ProductivityScoreCard } from "@/components/analytics/productivity-score-card";
@@ -56,7 +58,7 @@ export default function AnalyticsPage() {
               <SelectItem value="30">Last 30 Days</SelectItem>
             </SelectContent>
           </Select>
-          
+           <PageClock /> 
           <Button variant="outline" size="icon" onClick={() => loadData(Number(daysBack))} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
