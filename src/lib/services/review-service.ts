@@ -1,139 +1,97 @@
-import { supabase } from '../supabase';
-import { Goal, Milestone, GoalWithMilestones, GoalFormData, MilestoneFormData } from '../types/goal';
+import { supabase, isSupabaseConfigured } from "../supabase";
+import { WeeklyReview, WeeklyReviewFormData, WeeklyReviewMetrics } from "../types/review";
+import { getTasks } from "./task-service";
+import { getHabitLogs } from "./habit-service";
+import { getHealthLogs } from "./health-service";
+import { getTimeLogs } from "./time-service";
+import { startOfWeek, endOfWeek, parseISO, format } from "date-fns";
+
+async function getStorageKey(): Promise<string> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? "anonymous";
+    return `lifeos_weekly_reviews_${uid}`;
+  } catch { return "lifeos_weekly_reviews_anonymous"; }
+}
 
 function generateId() {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).substring(2, 15);
+  return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
 }
 
-// ── Goals ─────────────────────────────────────────────────────────────────────
-
-export async function getGoals(): Promise<GoalWithMilestones[]> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to access goals.");
-
-  const { data: goals, error: goalsError } = await supabase
-    .from('goals')
-    .select('*')
-    .eq('user_id', session.user.id)
-    .order('target_date', { ascending: true, nullsFirst: false });
-  if (goalsError) throw new Error(goalsError.message);
-
-  // ✅ FIXED: filter milestones by user_id, not relying on RLS alone
-  const { data: milestones, error: msError } = await supabase
-    .from('milestones')
-    .select('*')
-    .eq('user_id', session.user.id)
-    .order('created_at', { ascending: true });
-  if (msError) console.error("Supabase getMilestones error:", msError);
-
-  const allMilestones = (milestones as Milestone[]) || [];
-
-  return (goals as Goal[]).map(goal => ({
-    ...goal,
-    milestones: allMilestones.filter(m => m.goal_id === goal.id)
-  }));
+export async function getWeeklyMetricsSnapshot(dateInWeek: Date = new Date()): Promise<WeeklyReviewMetrics> {
+  const start = startOfWeek(dateInWeek, { weekStartsOn: 1 });
+  const end = endOfWeek(dateInWeek, { weekStartsOn: 1 });
+  const [tasks, habitLogs, healthLogs, timeLogs] = await Promise.all([getTasks(), getHabitLogs(), getHealthLogs(), getTimeLogs(start, end)]);
+  const tasksCompleted = tasks.filter(t => { if (t.status !== "completed" || !t.updated_at) return false; const d = parseISO(t.updated_at); return d >= start && d <= end; }).length;
+  const habitsCompleted = habitLogs.filter(l => { const d = parseISO(l.date); return d >= start && d <= end && l.completed; }).length;
+  let totalSleep = 0; let sleepCount = 0;
+  healthLogs.forEach(l => { const d = parseISO(l.date); if (d >= start && d <= end && l.sleep_hours && l.sleep_hours > 0) { totalSleep += l.sleep_hours; sleepCount++; } });
+  return {
+    tasks_completed: tasksCompleted,
+    habits_completed: habitsCompleted,
+    average_sleep: sleepCount > 0 ? Number((totalSleep / sleepCount).toFixed(1)) : 0,
+    total_focus_hours: Number((timeLogs.reduce((s, l) => s + l.duration_seconds, 0) / 3600).toFixed(1)),
+  };
 }
 
-export async function createGoal(formData: GoalFormData): Promise<Goal> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to create goals.");
-
-  const { data, error } = await supabase
-    .from('goals')
-    .insert([{
-      title: formData.title,
-      description: formData.description || null,
-      category: formData.category,
-      target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null,
-      user_id: session.user.id,
-    }])
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Goal;
+export async function getWeeklyReviews(): Promise<WeeklyReview[]> {
+  if (isSupabaseConfigured() && supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error("Not authenticated");
+    const { data, error } = await supabase.from("weekly_reviews").select("*").eq("user_id", session.user.id).order("week_start_date", { ascending: false });
+    if (error) throw new Error(error.message);
+    return data as WeeklyReview[];
+  }
+  try {
+    const key = await getStorageKey();
+    const raw = localStorage.getItem(key);
+    const reviews: WeeklyReview[] = raw ? JSON.parse(raw) : [];
+    return reviews.sort((a, b) => new Date(b.week_start_date).getTime() - new Date(a.week_start_date).getTime());
+  } catch { return []; }
 }
 
-export async function updateGoal(id: string, formData: GoalFormData): Promise<Goal> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to update goals.");
-
-  const { data, error } = await supabase
-    .from('goals')
-    .update({
-      title: formData.title,
-      description: formData.description || null,
-      category: formData.category,
-      target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', id)
-    .eq('user_id', session.user.id)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Goal;
+export async function getReviewForWeek(dateInWeek: Date): Promise<WeeklyReview | null> {
+  const startStr = format(startOfWeek(dateInWeek, { weekStartsOn: 1 }), "yyyy-MM-dd");
+  if (isSupabaseConfigured() && supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return null;
+    const { data, error } = await supabase.from("weekly_reviews").select("*").eq("user_id", session.user.id).eq("week_start_date", startStr).maybeSingle();
+    if (error) return null;
+    return data as WeeklyReview | null;
+  }
+  const all = await getWeeklyReviews();
+  return all.find(r => r.week_start_date === startStr) || null;
 }
 
-export async function deleteGoal(id: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to delete goals.");
-
-  const { error } = await supabase
-    .from('goals')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', session.user.id);
-  if (error) throw new Error(error.message);
-}
-
-// ── Milestones ────────────────────────────────────────────────────────────────
-
-export async function addMilestone(goalId: string, formData: MilestoneFormData): Promise<Milestone> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to add milestones.");
-
-  const { data, error } = await supabase
-    .from('milestones')
-    .insert([{
-      goal_id: goalId,
-      title: formData.title,
-      description: formData.description || null,
-      is_completed: false,
-      user_id: session.user.id,
-    }])
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Milestone;
-}
-
-export async function updateMilestone(id: string, updates: Partial<Milestone>): Promise<Milestone> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to update milestones.");
-
-  // ✅ FIXED: added .eq('user_id') so users can't update other users' milestones
-  const { data, error } = await supabase
-    .from('milestones')
-    .update(updates)
-    .eq('id', id)
-    .eq('user_id', session.user.id)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Milestone;
-}
-
-export async function deleteMilestone(id: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to delete milestones.");
-
-  // ✅ FIXED: added .eq('user_id') safety check
-  const { error } = await supabase
-    .from('milestones')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', session.user.id);
-  if (error) throw new Error(error.message);
+export async function saveWeeklyReview(formData: WeeklyReviewFormData, metrics: WeeklyReviewMetrics, dateInWeek: Date = new Date()): Promise<WeeklyReview> {
+  const start = startOfWeek(dateInWeek, { weekStartsOn: 1 });
+  const end = endOfWeek(dateInWeek, { weekStartsOn: 1 });
+  const startStr = format(start, "yyyy-MM-dd");
+  const endStr = format(end, "yyyy-MM-dd");
+  const existing = await getReviewForWeek(dateInWeek);
+  const model: Partial<WeeklyReview> = { week_start_date: startStr, week_end_date: endStr, went_well: formData.went_well, could_improve: formData.could_improve, biggest_achievement: formData.biggest_achievement, habits_maintained: formData.habits_maintained, habits_missed: formData.habits_missed, metrics, updated_at: new Date().toISOString() };
+  if (isSupabaseConfigured() && supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error("Not authenticated");
+    if (existing) {
+      const { data, error } = await supabase.from("weekly_reviews").update(model).eq("id", existing.id).eq("user_id", session.user.id).select().single();
+      if (error) throw new Error(error.message);
+      return data as WeeklyReview;
+    } else {
+      const { data, error } = await supabase.from("weekly_reviews").insert([{ ...model, user_id: session.user.id, created_at: new Date().toISOString() }]).select().single();
+      if (error) throw new Error(error.message);
+      return data as WeeklyReview;
+    }
+  }
+  const key = await getStorageKey();
+  const allRaw = localStorage.getItem(key);
+  const all: WeeklyReview[] = allRaw ? JSON.parse(allRaw) : [];
+  if (existing) {
+    const updated = { ...existing, ...model } as WeeklyReview;
+    localStorage.setItem(key, JSON.stringify(all.map(r => r.id === existing.id ? updated : r)));
+    return updated;
+  }
+  const newReview = { id: generateId(), created_at: new Date().toISOString(), ...model } as WeeklyReview;
+  localStorage.setItem(key, JSON.stringify([newReview, ...all]));
+  return newReview;
 }

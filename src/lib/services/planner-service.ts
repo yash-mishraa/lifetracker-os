@@ -1,139 +1,124 @@
-import { supabase } from '../supabase';
-import { Goal, Milestone, GoalWithMilestones, GoalFormData, MilestoneFormData } from '../types/goal';
+import { TimeBlock, EnergyLevel } from "../types/planner";
+import { getTasks } from "./task-service";
+import { getHabits, getHabitLogs } from "./habit-service";
+import { supabase } from "../supabase";
+import { parseISO, isSameDay, addMinutes, format } from "date-fns";
 
-function generateId() {
-  return typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).substring(2, 15);
+async function getStorageKey(): Promise<string> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? "anonymous";
+    return `lifeos_planner_schedule_${uid}`;
+  } catch {
+    return "lifeos_planner_schedule_anonymous";
+  }
 }
 
-// ── Goals ─────────────────────────────────────────────────────────────────────
-
-export async function getGoals(): Promise<GoalWithMilestones[]> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to access goals.");
-
-  const { data: goals, error: goalsError } = await supabase
-    .from('goals')
-    .select('*')
-    .eq('user_id', session.user.id)
-    .order('target_date', { ascending: true, nullsFirst: false });
-  if (goalsError) throw new Error(goalsError.message);
-
-  // ✅ FIXED: filter milestones by user_id, not relying on RLS alone
-  const { data: milestones, error: msError } = await supabase
-    .from('milestones')
-    .select('*')
-    .eq('user_id', session.user.id)
-    .order('created_at', { ascending: true });
-  if (msError) console.error("Supabase getMilestones error:", msError);
-
-  const allMilestones = (milestones as Milestone[]) || [];
-
-  return (goals as Goal[]).map(goal => ({
-    ...goal,
-    milestones: allMilestones.filter(m => m.goal_id === goal.id)
-  }));
+function getEnergyLevelForTask(priority: string): EnergyLevel {
+  switch (priority) {
+    case "critical": case "high": return "High";
+    case "medium": return "Medium";
+    default: return "Low";
+  }
 }
 
-export async function createGoal(formData: GoalFormData): Promise<Goal> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to create goals.");
-
-  const { data, error } = await supabase
-    .from('goals')
-    .insert([{
-      title: formData.title,
-      description: formData.description || null,
-      category: formData.category,
-      target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null,
-      user_id: session.user.id,
-    }])
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Goal;
+async function getAllSchedules(): Promise<Record<string, TimeBlock[]>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const key = await getStorageKey();
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
 }
 
-export async function updateGoal(id: string, formData: GoalFormData): Promise<Goal> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to update goals.");
+async function saveAllSchedules(all: Record<string, TimeBlock[]>): Promise<void> {
+  if (typeof window !== "undefined") {
+    const key = await getStorageKey();
+    localStorage.setItem(key, JSON.stringify(all));
+  }
+}
 
-  const { data, error } = await supabase
-    .from('goals')
-    .update({
-      title: formData.title,
-      description: formData.description || null,
-      category: formData.category,
-      target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null,
-      updated_at: new Date().toISOString(),
+export async function getScheduleForDate(date: Date): Promise<TimeBlock[]> {
+  const dateStr = format(date, "yyyy-MM-dd");
+  const all = await getAllSchedules();
+  return all[dateStr] ?? [];
+}
+
+export async function saveScheduleForDate(date: Date, blocks: TimeBlock[]): Promise<void> {
+  const dateStr = format(date, "yyyy-MM-dd");
+  const all = await getAllSchedules();
+  all[dateStr] = blocks;
+  await saveAllSchedules(all);
+}
+
+export async function getTodaySchedule(): Promise<TimeBlock[]> {
+  return getScheduleForDate(new Date());
+}
+
+export async function saveSchedule(blocks: TimeBlock[]): Promise<void> {
+  return saveScheduleForDate(new Date(), blocks);
+}
+
+export async function generateAutoSchedule(): Promise<TimeBlock[]> {
+  const today = new Date();
+  const todayStr = format(today, "yyyy-MM-dd");
+  const dayOfWeek = today.getDay();
+  const [tasks, habits, habitLogs] = await Promise.all([getTasks(), getHabits(), getHabitLogs()]);
+  const blocks: TimeBlock[] = [];
+
+  const activeTasks = tasks
+    .filter(t => {
+      if (t.status === "completed") return false;
+      if (!t.deadline) return true;
+      const due = parseISO(t.deadline);
+      return isSameDay(due, today) || due < today;
     })
-    .eq('id', id)
-    .eq('user_id', session.user.id)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Goal;
+    .sort((a, b) => {
+      const w: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+      return w[b.priority] - w[a.priority];
+    });
+
+  const activeHabits = habits.filter(h => {
+    let scheduled = false;
+    if (h.frequency_type === "daily") scheduled = true;
+    if (h.frequency_type === "weekdays" && h.frequency_days.includes(dayOfWeek)) scheduled = true;
+    if (h.frequency_type === "custom") scheduled = true;
+    if (!scheduled) return false;
+    const log = habitLogs.find(l => l.habit_id === h.id && l.date === todayStr);
+    return !log || !log.completed;
+  });
+
+  let morning = new Date(today); morning.setHours(9, 0, 0, 0);
+  let afternoon = new Date(today); afternoon.setHours(13, 0, 0, 0);
+  let evening = new Date(today); evening.setHours(18, 0, 0, 0);
+
+  for (const task of activeTasks) {
+    const energy = getEnergyLevelForTask(task.priority);
+    const mins = task.estimated_minutes || 60;
+    let start: Date;
+    if (energy === "High") { start = new Date(morning); morning = addMinutes(start, mins + 15); }
+    else if (energy === "Medium") { start = new Date(afternoon); afternoon = addMinutes(start, mins + 15); }
+    else { start = new Date(evening); evening = addMinutes(start, mins + 15); }
+    blocks.push({ id: `task-${task.id}`, type: "task", title: task.title, description: task.description, energyLevel: energy, startTime: format(start, "HH:mm"), endTime: format(addMinutes(start, mins), "HH:mm"), sourceId: task.id, isCompleted: false });
+  }
+
+  for (const habit of activeHabits) {
+    let start: Date;
+    if (habit.reminder_time) {
+      const [h, m] = habit.reminder_time.split(":").map(Number);
+      start = new Date(today); start.setHours(h, m, 0, 0);
+    } else { start = new Date(evening); evening = addMinutes(start, 40); }
+    blocks.push({ id: `habit-${habit.id}`, type: "habit", title: habit.name, energyLevel: "Low", startTime: format(start, "HH:mm"), endTime: format(addMinutes(start, 30), "HH:mm"), sourceId: habit.id, isCompleted: false });
+  }
+
+  blocks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  return blocks;
 }
 
-export async function deleteGoal(id: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to delete goals.");
-
-  const { error } = await supabase
-    .from('goals')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', session.user.id);
-  if (error) throw new Error(error.message);
-}
-
-// ── Milestones ────────────────────────────────────────────────────────────────
-
-export async function addMilestone(goalId: string, formData: MilestoneFormData): Promise<Milestone> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to add milestones.");
-
-  const { data, error } = await supabase
-    .from('milestones')
-    .insert([{
-      goal_id: goalId,
-      title: formData.title,
-      description: formData.description || null,
-      is_completed: false,
-      user_id: session.user.id,
-    }])
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Milestone;
-}
-
-export async function updateMilestone(id: string, updates: Partial<Milestone>): Promise<Milestone> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to update milestones.");
-
-  // ✅ FIXED: added .eq('user_id') so users can't update other users' milestones
-  const { data, error } = await supabase
-    .from('milestones')
-    .update(updates)
-    .eq('id', id)
-    .eq('user_id', session.user.id)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data as Milestone;
-}
-
-export async function deleteMilestone(id: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user?.id) throw new Error("User must be logged in to delete milestones.");
-
-  // ✅ FIXED: added .eq('user_id') safety check
-  const { error } = await supabase
-    .from('milestones')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', session.user.id);
-  if (error) throw new Error(error.message);
+export async function updateBlockTime(blockId: string, newStartTime: string, newEndTime: string): Promise<TimeBlock[]> {
+  const blocks = await getTodaySchedule();
+  const updated = blocks.map(b => b.id === blockId && !b.isLocked ? { ...b, startTime: newStartTime, endTime: newEndTime } : b);
+  updated.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  await saveSchedule(updated);
+  return updated;
 }
