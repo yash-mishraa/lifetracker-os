@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { getTodaySummary, DashboardSummary } from "@/lib/services/dashboard-service";
 import { getGamificationStats } from "@/lib/services/gamification-service";
 import { GamificationStats } from "@/lib/types/gamification";
+import { getTodaySchedule } from "@/lib/services/planner-service";
+import { TimeBlock } from "@/lib/types/planner";
 import { MetricRings } from "@/components/dashboard/metric-rings";
 import { TodayHabitsCard } from "@/components/dashboard/today-habits-card";
 import { FocusSummaryCard } from "@/components/dashboard/focus-summary-card";
@@ -23,6 +25,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [gamification, setGamification] = useState<GamificationStats | null>(null);
   const [discipline, setDiscipline] = useState<DisciplineHistory | null>(null);
+  const [todayBlocks, setTodayBlocks] = useState<TimeBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { toast } = useToast();
@@ -32,14 +35,16 @@ export default function DashboardPage() {
   async function loadDashboard() {
     try {
       setErrorMsg(null);
-      const [sumData, gamData, discData] = await Promise.all([
+      const [sumData, gamData, discData, blocks] = await Promise.all([
         getTodaySummary(),
         getGamificationStats(),
         getDisciplineHistory(7),
+        getTodaySchedule(),
       ]);
       setSummary(sumData);
       setGamification(gamData);
       setDiscipline(discData);
+      setTodayBlocks(blocks);
     } catch (err: any) {
       console.error("Dashboard Load Error:", err);
       setErrorMsg(err.message || String(err));
@@ -48,6 +53,11 @@ export default function DashboardPage() {
   }
 
   const handleDataChange = () => { loadDashboard(); };
+
+  // Completed planner blocks for work-done calculation
+  const completedBlocks = todayBlocks
+    .filter(b => b.isCompleted && b.type !== "break")
+    .map(b => ({ startTime: b.startTime, endTime: b.endTime }));
 
   return (
     <div className="p-6 md:p-12 space-y-8 max-w-7xl mx-auto">
@@ -58,9 +68,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold tracking-tight">Today</h1>
           <p className="text-muted-foreground">Your command center for the day.</p>
         </div>
-        <div className="pt-1">
-          <QuickActions onActionComplete={handleDataChange} />
-        </div>
+        <div className="pt-1"><QuickActions onActionComplete={handleDataChange} /></div>
       </div>
 
       {loading ? (
@@ -78,7 +86,7 @@ export default function DashboardPage() {
       ) : summary ? (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-          {/* Top Row: Metric Rings & Discipline Score */}
+          {/* Top Row */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-3"><MetricRings summary={summary} /></div>
             <div className="lg:col-span-1 h-full min-h-[350px]">
@@ -88,10 +96,7 @@ export default function DashboardPage() {
 
           {/* Middle Row: Unified Plan + Habits */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* TodaysPlan now has both Schedule + Tasks tabs inside */}
-            <div className="lg:col-span-2 min-h-[380px]">
-              <TodaysPlan />
-            </div>
+            <div className="lg:col-span-2 min-h-[380px]"><TodaysPlan /></div>
             <div className="lg:col-span-1">
               <TodayHabitsCard
                 initialHabits={summary.habits.allScheduledToday}
@@ -100,10 +105,15 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Bottom Row: Focus & Goals */}
+          {/* Bottom Row: Work Done + Goals */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
-              <FocusSummaryCard focusSeconds={summary.time.focusSecondsToday} />
+              <FocusSummaryCard
+                focusSeconds={summary.time.focusSecondsToday}
+                completedBlocks={completedBlocks}
+                completedTasksCount={summary.tasks.completedTodayCount}
+                totalTasksCount={summary.tasks.totalDueTodayCount}
+              />
             </div>
             <div className="md:col-span-2">
               <GoalsSummaryCard activeGoals={summary.goals.topActive} />

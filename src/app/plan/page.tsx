@@ -836,11 +836,12 @@ export default function PlanPage() {
 
       {/* ══ Task Dialog ══ */}
       <TaskDialog
-        open={taskDialogOpen}
-        onOpenChange={(open) => { setTaskDialogOpen(open); if (!open) setEditingTask(null); }}
-        task={editingTask} projects={projects}
-        onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
-      />
+  open={taskDialogOpen}
+  onOpenChange={(open) => { setTaskDialogOpen(open); if (!open) setEditingTask(null); }}
+  task={editingTask} projects={projects}
+  forDate={selectedDate}
+  onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
+/>
 
       {/* ══ Schedule Task Dialog ══ */}
       <ScheduleTaskDialog task={scheduleTask} open={scheduleDialogOpen}
