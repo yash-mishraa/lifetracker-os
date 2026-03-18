@@ -2,19 +2,18 @@
 
 import { useEffect, useState, useCallback } from "react";
 
-// ── Planner imports ──────────────────────────────────────────────────────────
+// ── Planner ──────────────────────────────────────────────────────────────────
 import { DailyTimeline } from "@/components/planner/daily-timeline";
 import { getScheduleForDate, saveScheduleForDate } from "@/lib/services/planner-service";
 import { TimeBlock, BlockType, EnergyLevel } from "@/lib/types/planner";
 
-// ── Task imports ─────────────────────────────────────────────────────────────
+// ── Tasks ────────────────────────────────────────────────────────────────────
 import {
   Task, Project, TaskFilter, TaskFormData, DEFAULT_TASK_FORM, PRIORITY_CONFIG,
 } from "@/lib/types/task";
 import {
   getTasks, createTask, updateTask, deleteTask,
-  toggleTaskComplete, getSubtasks, createSubtask,
-  getProjects, getAllTags,
+  toggleTaskComplete, getSubtasks, getProjects, getAllTags,
 } from "@/lib/services/task-service";
 import { TaskDialog } from "@/components/tasks/task-dialog";
 import { TaskFilters } from "@/components/tasks/task-filters";
@@ -43,16 +42,14 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import {
   Plus, ChevronLeft, ChevronRight, CalendarDays, List,
-  Columns3, Sun, CalendarPlus, Clock, Pencil, Trash2,
-  CheckCircle2, MoreHorizontal,
+  Columns3, Sun, CalendarPlus, Clock, Pencil, Trash2, CheckCircle2, MoreHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday,
-  isPast,
+  addDays, addMonths, subMonths, isSameMonth, isSameDay, isToday, isPast,
 } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -77,22 +74,30 @@ function priorityToEnergy(priority: string): EnergyLevel {
   return "Low";
 }
 
+function minsFromTimes(start: string, end: string): number {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+}
+
+function deadlineFromTimeAndDate(date: Date, time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date(date);
+  d.setHours(h, m, 0, 0);
+  return d.toISOString().slice(0, 16);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mini Calendar
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface MiniCalendarProps {
-  selected: Date;
-  onSelect: (date: Date) => void;
-  scheduledDates: Set<string>;
-}
-
-function MiniCalendar({ selected, onSelect, scheduledDates }: MiniCalendarProps) {
+function MiniCalendar({ selected, onSelect, scheduledDates }: {
+  selected: Date; onSelect: (d: Date) => void; scheduledDates: Set<string>;
+}) {
   const [viewMonth, setViewMonth] = useState(startOfMonth(selected));
   const weeks: Date[][] = [];
-  const calStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 1 });
+  let day = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 1 });
   const calEnd = endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 1 });
-  let day = calStart;
   while (day <= calEnd) {
     const week: Date[] = [];
     for (let i = 0; i < 7; i++) { week.push(day); day = addDays(day, 1); }
@@ -122,18 +127,16 @@ function MiniCalendar({ selected, onSelect, scheduledDates }: MiniCalendarProps)
           const isSelected = isSameDay(d, selected);
           const inMonth = isSameMonth(d, viewMonth);
           const isTodayDate = isToday(d);
-          const hasBlocks = scheduledDates.has(dateStr);
           return (
             <button key={i} onClick={() => onSelect(d)}
               className={cn(
                 "relative h-8 w-full flex items-center justify-center rounded-full text-xs font-medium transition-all",
                 !inMonth && "opacity-20",
                 isSelected ? "bg-foreground text-background"
-                  : isTodayDate ? "text-indigo-400 font-bold"
-                  : "hover:bg-muted/60 text-foreground",
+                  : isTodayDate ? "text-indigo-400 font-bold" : "hover:bg-muted/60 text-foreground",
               )}>
               {format(d, "d")}
-              {hasBlocks && !isSelected && (
+              {scheduledDates.has(dateStr) && !isSelected && (
                 <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-indigo-400" />
               )}
             </button>
@@ -145,20 +148,14 @@ function MiniCalendar({ selected, onSelect, scheduledDates }: MiniCalendarProps)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Enhanced Task Row (Tasks tab) — with Schedule button
+// Task Row with Schedule button
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface TaskRowProps {
-  task: Task;
-  subtasks: Task[];
-  scheduledIds: Set<string>;
-  onToggle: (task: Task) => void;
-  onEdit: (task: Task) => void;
-  onDelete: (task: Task) => void;
-  onSchedule: (task: Task) => void;
-}
-
-function TaskRow({ task, subtasks, scheduledIds, onToggle, onEdit, onDelete, onSchedule }: TaskRowProps) {
+function TaskRow({ task, subtasks, scheduledIds, onToggle, onEdit, onDelete, onSchedule }: {
+  task: Task; subtasks: Task[]; scheduledIds: Set<string>;
+  onToggle: (t: Task) => void; onEdit: (t: Task) => void;
+  onDelete: (t: Task) => void; onSchedule: (t: Task) => void;
+}) {
   const cfg = PRIORITY_CONFIG[task.priority];
   const isCompleted = task.status === "completed";
   const isOverdue = task.deadline && isPast(new Date(task.deadline)) && !isToday(new Date(task.deadline)) && !isCompleted;
@@ -171,25 +168,19 @@ function TaskRow({ task, subtasks, scheduledIds, onToggle, onEdit, onDelete, onS
       isCompleted ? "opacity-50 bg-muted/10 border-muted/30" : "bg-card/50 border-border hover:border-border/80 hover:shadow-sm",
       isOverdue && "border-red-500/20",
     )}>
-      <Checkbox
-        checked={isCompleted}
-        onCheckedChange={() => onToggle(task)}
-        className="mt-0.5 rounded-full shrink-0"
-      />
+      <Checkbox checked={isCompleted} onCheckedChange={() => onToggle(task)} className="mt-0.5 rounded-full shrink-0" />
       <div className="flex-1 min-w-0">
         <p className={cn("text-sm font-medium truncate", isCompleted && "line-through text-muted-foreground")}>
           {task.title}
         </p>
         <div className="flex flex-wrap items-center gap-2 mt-1.5">
           <Badge variant="secondary" className={cn("text-[10px] gap-1 px-1.5 py-0 h-4", cfg.bgColor, cfg.color)}>
-            <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dotColor)} />
-            {cfg.label}
+            <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dotColor)} />{cfg.label}
           </Badge>
           {task.deadline && (
             <span className={cn("text-[10px] flex items-center gap-1",
               isOverdue ? "text-red-400" : isDueToday ? "text-amber-400" : "text-muted-foreground")}>
-              <CalendarDays className="h-3 w-3" />
-              {format(new Date(task.deadline), "MMM d")}
+              <CalendarDays className="h-3 w-3" />{format(new Date(task.deadline), "MMM d, HH:mm")}
               {isOverdue && " · Overdue"}
             </span>
           )}
@@ -205,28 +196,19 @@ function TaskRow({ task, subtasks, scheduledIds, onToggle, onEdit, onDelete, onS
           )}
           {isScheduled && (
             <span className="text-[10px] text-indigo-400 flex items-center gap-1">
-              <CalendarPlus className="h-3 w-3" /> Scheduled
+              <CalendarPlus className="h-3 w-3" /> In planner
             </span>
           )}
         </div>
       </div>
-
-      {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         {!isCompleted && (
-          <Button
-            size="sm"
-            variant={isScheduled ? "secondary" : "outline"}
-            onClick={() => onSchedule(task)}
-            className={cn(
-              "h-7 text-[11px] px-2 gap-1",
+          <Button size="sm" variant={isScheduled ? "secondary" : "outline"} onClick={() => onSchedule(task)}
+            className={cn("h-7 text-[11px] px-2 gap-1",
               isScheduled
                 ? "text-indigo-400 border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20"
-                : "text-muted-foreground hover:text-indigo-400 hover:border-indigo-500/30"
-            )}
-          >
-            <CalendarPlus className="h-3 w-3" />
-            {isScheduled ? "Scheduled" : "Schedule"}
+                : "text-muted-foreground hover:text-indigo-400 hover:border-indigo-500/30")}>
+            <CalendarPlus className="h-3 w-3" />{isScheduled ? "Scheduled" : "Schedule"}
           </Button>
         )}
         <DropdownMenu>
@@ -234,12 +216,8 @@ function TaskRow({ task, subtasks, scheduledIds, onToggle, onEdit, onDelete, onS
             <MoreHorizontal className="h-3.5 w-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(task)}>
-              <Pencil className="h-3.5 w-3.5 mr-2" /> Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={() => onDelete(task)}>
-              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit(task)}><Pencil className="h-3.5 w-3.5 mr-2" />Edit</DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={() => onDelete(task)}><Trash2 className="h-3.5 w-3.5 mr-2" />Delete</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -251,34 +229,24 @@ function TaskRow({ task, subtasks, scheduledIds, onToggle, onEdit, onDelete, onS
 // Schedule Task Dialog
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ScheduleTaskDialogProps {
-  task: Task | null;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
+function ScheduleTaskDialog({ task, open, onOpenChange, onConfirm }: {
+  task: Task | null; open: boolean; onOpenChange: (v: boolean) => void;
   onConfirm: (task: Task, date: Date, startTime: string, endTime: string) => void;
-}
-
-function ScheduleTaskDialog({ task, open, onOpenChange, onConfirm }: ScheduleTaskDialogProps) {
+}) {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState(() => {
-    const mins = task?.estimated_minutes || 60;
-    const h = 9 + Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
-  });
+  const [endTime, setEndTime] = useState("10:00");
 
   useEffect(() => {
     if (task) {
       const mins = task.estimated_minutes || 60;
       const [sh, sm] = startTime.split(":").map(Number);
       const total = sh * 60 + sm + mins;
-      setEndTime(`${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`);
+      setEndTime(`${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
     }
   }, [task, startTime]);
 
   if (!task) return null;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
@@ -292,29 +260,19 @@ function ScheduleTaskDialog({ task, open, onOpenChange, onConfirm }: ScheduleTas
             <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Start</Label>
-              <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>End</Label>
-              <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
-            </div>
+            <div className="space-y-1.5"><Label>Start</Label>
+              <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>End</Label>
+              <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></div>
           </div>
           {task.estimated_minutes > 0 && (
-            <p className="text-[11px] text-muted-foreground">
-              Estimated duration: {task.estimated_minutes} min
-            </p>
+            <p className="text-[11px] text-muted-foreground">Estimated: {task.estimated_minutes} min</p>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button
-            onClick={() => { onConfirm(task, new Date(date + "T00:00:00"), startTime, endTime); onOpenChange(false); }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white"
-          >
-            Add to Planner
-          </Button>
+          <Button onClick={() => { onConfirm(task, new Date(date + "T00:00:00"), startTime, endTime); onOpenChange(false); }}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white">Add to Planner</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -322,22 +280,17 @@ function ScheduleTaskDialog({ task, open, onOpenChange, onConfirm }: ScheduleTas
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types
+// Page
 // ─────────────────────────────────────────────────────────────────────────────
 
 type TopTab = "planner" | "tasks";
 type TaskView = "list" | "kanban" | "today" | "calendar";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function PlanPage() {
   const { toast } = useToast();
-
   const [topTab, setTopTab] = useState<TopTab>("planner");
 
-  // ── Planner ────────────────────────────────────────────────────────────────
+  // ── Planner state ──────────────────────────────────────────────────────────
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [schedule, setSchedule] = useState<TimeBlock[]>([]);
   const [plannerLoading, setPlannerLoading] = useState(true);
@@ -347,7 +300,7 @@ export default function PlanPage() {
   const [deleteBlockId, setDeleteBlockId] = useState<string | null>(null);
   const [blockForm, setBlockForm] = useState(EMPTY_BLOCK_FORM);
 
-  // ── Tasks ──────────────────────────────────────────────────────────────────
+  // ── Task state ─────────────────────────────────────────────────────────────
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [subtasksMap, setSubtasksMap] = useState<Record<string, Task[]>>({});
@@ -358,13 +311,10 @@ export default function PlanPage() {
   });
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-
-  // ── Schedule-task dialog ───────────────────────────────────────────────────
   const [scheduleTask, setScheduleTask] = useState<Task | null>(null);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
 
-  // ── Scheduled task IDs (sourceId set) across ALL dates ────────────────────
-  // We track which task IDs are already in today's schedule for the badge
+  // Scheduled task IDs in currently viewed schedule
   const scheduledTaskIds: Set<string> = new Set(
     schedule.filter(b => b.sourceId).map(b => b.sourceId!)
   );
@@ -397,14 +347,13 @@ export default function PlanPage() {
         if (subs.length > 0) subMap[t.id] = subs;
       }));
       setSubtasksMap(subMap);
-    } catch (err) {
-      console.error("Failed to load tasks:", err);
-    } finally { setTasksLoading(false); }
+    } catch (err) { console.error("Failed to load tasks:", err); }
+    finally { setTasksLoading(false); }
   }, [filter]);
 
   useEffect(() => { loadTasks(); }, [loadTasks]);
 
-  // ── Planner handlers ───────────────────────────────────────────────────────
+  // ── Persist schedule ───────────────────────────────────────────────────────
   async function persistSchedule(blocks: TimeBlock[], date: Date = selectedDate) {
     setSchedule(blocks);
     try {
@@ -414,12 +363,8 @@ export default function PlanPage() {
     } catch (err) { console.error("Failed to save schedule", err); }
   }
 
-  function openAddBlock() {
-    setEditingBlock(null);
-    setBlockForm(EMPTY_BLOCK_FORM);
-    setShowBlockDialog(true);
-  }
-
+  // ── Block dialog ───────────────────────────────────────────────────────────
+  function openAddBlock() { setEditingBlock(null); setBlockForm(EMPTY_BLOCK_FORM); setShowBlockDialog(true); }
   function openEditBlock(block: TimeBlock) {
     setEditingBlock(block);
     setBlockForm({
@@ -433,18 +378,44 @@ export default function PlanPage() {
 
   async function handleSaveBlock() {
     if (!blockForm.title.trim()) { toast({ title: "Title is required", variant: "destructive" }); return; }
+
     if (editingBlock) {
+      // Update block
       await persistSchedule(schedule.map(b =>
         b.id === editingBlock.id ? { ...b, ...blockForm, description: blockForm.description || undefined } : b
       ));
+      // If linked to a task, update task title too
+      if (editingBlock.sourceId) {
+        try { await updateTask(editingBlock.sourceId, { title: blockForm.title }); loadTasks(); } catch {}
+      }
       toast({ title: "Block updated." });
     } else {
+      const blockId = generateId();
+      // ── Feature 2: Block → Task auto-creation ──────────────────────────────
+      let sourceId: string | undefined;
+      if (blockForm.type === "task") {
+        try {
+          const newTask = await createTask({
+            ...DEFAULT_TASK_FORM,
+            title: blockForm.title,
+            description: blockForm.description,
+            priority: blockForm.energyLevel === "High" ? "high" : blockForm.energyLevel === "Medium" ? "medium" : "low",
+            status: "todo",
+            deadline: deadlineFromTimeAndDate(selectedDate, blockForm.startTime),
+            estimated_minutes: minsFromTimes(blockForm.startTime, blockForm.endTime),
+          });
+          sourceId = newTask.id;
+          loadTasks();
+        } catch (err) { console.error("Failed to create linked task", err); }
+      }
       const block: TimeBlock = {
-        id: generateId(), ...blockForm,
-        description: blockForm.description || undefined, isCompleted: false,
+        id: blockId, ...blockForm,
+        description: blockForm.description || undefined,
+        isCompleted: false,
+        sourceId,
       };
       await persistSchedule([...schedule, block]);
-      toast({ title: "Block added." });
+      toast({ title: "Block added." + (sourceId ? " Task created automatically." : "") });
     }
     setShowBlockDialog(false);
   }
@@ -459,90 +430,115 @@ export default function PlanPage() {
     const updated = schedule.map(b => b.id === id ? { ...b, isCompleted } : b);
     setSchedule(updated);
     const block = schedule.find(b => b.id === id);
-    // Sync back to task if linked
-    if (block?.sourceId && block.type === "task") {
+    if (block?.sourceId) {
       try {
         await updateTask(block.sourceId, { status: isCompleted ? "completed" : "todo" });
-        // Refresh tasks so status badge updates in Tasks tab too
         loadTasks();
       } catch (err: any) {
         toast({ title: "Action failed", description: err.message, variant: "destructive" });
-        setSchedule(schedule);
-        return;
+        setSchedule(schedule); return;
       }
     }
     try { await saveScheduleForDate(selectedDate, updated); } catch {}
     if (isCompleted) toast({ title: "Marked as complete!" });
   }
 
-  // ── Schedule a task into the planner ──────────────────────────────────────
+  // ── Schedule task into planner ─────────────────────────────────────────────
   async function handleScheduleTaskConfirm(task: Task, date: Date, startTime: string, endTime: string) {
-    const dateStr = format(date, "yyyy-MM-dd");
     const existingBlocks = await getScheduleForDate(date);
-
-    // Don't double-add
     if (existingBlocks.some(b => b.sourceId === task.id)) {
-      toast({ title: "Already scheduled", description: `"${task.title}" is already in that day's planner.` });
-      return;
+      toast({ title: "Already scheduled", description: `"${task.title}" is already in that day's planner.` }); return;
     }
-
     const block: TimeBlock = {
-      id: generateId(),
-      type: "task",
-      title: task.title,
-      description: task.description || undefined,
+      id: generateId(), type: "task",
+      title: task.title, description: task.description || undefined,
       energyLevel: priorityToEnergy(task.priority),
-      startTime,
-      endTime,
-      sourceId: task.id,
-      isCompleted: task.status === "completed",
-      isLocked: false,
+      startTime, endTime, sourceId: task.id,
+      isCompleted: task.status === "completed", isLocked: false,
     };
-
     const updated = [...existingBlocks, block].sort((a, b) => a.startTime.localeCompare(b.startTime));
     await saveScheduleForDate(date, updated);
-    setScheduledDates(prev => new Set([...prev, dateStr]));
-
-    // If scheduled for currently selected date, refresh timeline
-    if (isSameDay(date, selectedDate)) {
-      setSchedule(updated);
-    }
-
-    toast({
-      title: "Scheduled!",
-      description: `"${task.title}" added to ${isToday(date) ? "today's" : format(date, "MMM d's")} planner.`,
-    });
+    setScheduledDates(prev => new Set([...prev, format(date, "yyyy-MM-dd")]));
+    if (isSameDay(date, selectedDate)) setSchedule(updated);
+    toast({ title: "Scheduled!", description: `"${task.title}" added to ${isToday(date) ? "today's" : format(date, "MMM d's")} planner.` });
   }
 
   // ── Task handlers ──────────────────────────────────────────────────────────
-  const handleCreateTask = async (data: TaskFormData) => { await createTask(data); loadTasks(); };
+  const handleCreateTask = async (data: TaskFormData) => {
+    const newTask = await createTask(data);
+    loadTasks();
+    // ── Feature 1: Task → Planner auto-block ──────────────────────────────────
+    // Only auto-schedule if deadline is today
+    if (data.deadline) {
+      const deadlineDate = new Date(data.deadline);
+      if (isToday(deadlineDate)) {
+        const sh = String(deadlineDate.getHours()).padStart(2, "0");
+        const sm = String(deadlineDate.getMinutes()).padStart(2, "0");
+        const startTime = `${sh}:${sm}`;
+        const endMins = deadlineDate.getHours() * 60 + deadlineDate.getMinutes() + (data.estimated_minutes || 60);
+        const endTime = `${String(Math.floor(endMins / 60)).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}`;
+        const todayBlocks = await getScheduleForDate(new Date());
+        if (!todayBlocks.some(b => b.sourceId === newTask.id)) {
+          const block: TimeBlock = {
+            id: generateId(), type: "task",
+            title: newTask.title, description: newTask.description || undefined,
+            energyLevel: priorityToEnergy(newTask.priority),
+            startTime, endTime, sourceId: newTask.id,
+            isCompleted: false, isLocked: false,
+          };
+          const updated = [...todayBlocks, block].sort((a, b) => a.startTime.localeCompare(b.startTime));
+          await saveScheduleForDate(new Date(), updated);
+          if (isToday(selectedDate)) setSchedule(updated);
+          setScheduledDates(prev => new Set([...prev, format(new Date(), "yyyy-MM-dd")]));
+        }
+      }
+    }
+  };
+
   const handleUpdateTask = async (data: TaskFormData) => {
     if (!editingTask) return;
     await updateTask(editingTask.id, data);
     setEditingTask(null); loadTasks();
+    // Update linked block title if it changed
+    const linked = schedule.find(b => b.sourceId === editingTask.id);
+    if (linked && data.title !== linked.title) {
+      await persistSchedule(schedule.map(b =>
+        b.sourceId === editingTask.id ? { ...b, title: data.title } : b
+      ));
+    }
   };
-  const handleDeleteTask = async (task: Task) => { await deleteTask(task.id); loadTasks(); };
+
+  const handleDeleteTask = async (task: Task) => {
+    await deleteTask(task.id);
+    loadTasks();
+    // Remove linked block from schedule too
+    const hasLinked = schedule.some(b => b.sourceId === task.id);
+    if (hasLinked) {
+      await persistSchedule(schedule.filter(b => b.sourceId !== task.id));
+      toast({ title: "Task and its schedule block removed." });
+    }
+  };
+
   const handleToggleTaskComplete = async (task: Task) => {
     await toggleTaskComplete(task);
     loadTasks();
-    // Sync to planner block if it exists in current schedule
+    const isCompleting = task.status !== "completed";
     const linked = schedule.find(b => b.sourceId === task.id);
     if (linked) {
-      const isCompleting = task.status !== "completed";
       const updated = schedule.map(b => b.id === linked.id ? { ...b, isCompleted: isCompleting } : b);
       setSchedule(updated);
       await saveScheduleForDate(selectedDate, updated);
     }
   };
+
   const handleEditTask = (task: Task) => { setEditingTask(task); setTaskDialogOpen(true); };
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const isSelectedToday = isToday(selectedDate);
   const dateLabel = isSelectedToday ? "Today" : format(selectedDate, "EEEE, d MMM");
   const allTags = getAllTags(tasks);
+  const pendingUnscheduled = tasks.filter(t => t.status !== "completed" && !scheduledTaskIds.has(t.id));
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-6">
@@ -556,29 +552,28 @@ export default function PlanPage() {
           <p className="text-sm text-muted-foreground mt-1">Your tasks and daily schedule, unified.</p>
         </div>
         <div className="flex items-center bg-muted/40 border rounded-xl p-1 gap-1">
-          <button onClick={() => setTopTab("planner")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all",
-              topTab === "planner" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-            )}>
-            <CalendarDays className="h-3.5 w-3.5" /> Planner
-          </button>
-          <button onClick={() => setTopTab("tasks")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all",
-              topTab === "tasks" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-            )}>
-            <List className="h-3.5 w-3.5" /> Tasks
-            {tasks.filter(t => t.status !== "completed").length > 0 && (
-              <span className="text-[10px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full font-medium">
-                {tasks.filter(t => t.status !== "completed").length}
-              </span>
-            )}
-          </button>
+          {(["planner", "tasks"] as TopTab[]).map(tab => (
+            <button key={tab} onClick={() => setTopTab(tab)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all capitalize",
+                topTab === tab ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}>
+              {tab === "planner" ? <CalendarDays className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
+              {tab === "planner" ? "Planner" : (
+                <span className="flex items-center gap-1.5">Tasks
+                  {tasks.filter(t => t.status !== "completed").length > 0 && (
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full">
+                      {tasks.filter(t => t.status !== "completed").length}
+                    </span>
+                  )}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ══════════════════ PLANNER TAB ══════════════════ */}
+      {/* ══════════ PLANNER ══════════ */}
       {topTab === "planner" && (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6 items-start">
           <div className="space-y-4">
@@ -593,44 +588,37 @@ export default function PlanPage() {
             )}
             <div className="bg-card border rounded-2xl p-5 shadow-sm">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Block types</p>
-              {[
-                { color: "bg-blue-500", label: "Task" },
-                { color: "bg-orange-500", label: "Habit" },
-                { color: "bg-purple-500", label: "Focus" },
-                { color: "bg-green-500", label: "Break" },
-              ].map(({ color, label }) => (
-                <div key={label} className="flex items-center gap-2.5 mb-2 last:mb-0">
-                  <span className={cn("h-2 w-2 rounded-full", color)} />
-                  <span className="text-xs text-muted-foreground">{label}</span>
+              {[["bg-blue-500","Task"],["bg-orange-500","Habit"],["bg-purple-500","Focus"],["bg-green-500","Break"]].map(([c,l]) => (
+                <div key={l} className="flex items-center gap-2.5 mb-2 last:mb-0">
+                  <span className={cn("h-2 w-2 rounded-full", c)} />
+                  <span className="text-xs text-muted-foreground">{l}</span>
                 </div>
               ))}
             </div>
 
-            {/* Unscheduled tasks quick-view */}
-            {tasks.filter(t => t.status !== "completed" && !scheduledTaskIds.has(t.id)).length > 0 && (
+            {/* Unscheduled tasks panel */}
+            {pendingUnscheduled.length > 0 && (
               <div className="bg-card border rounded-2xl p-5 shadow-sm">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">
-                  Unscheduled Tasks
+                  Unscheduled ({pendingUnscheduled.length})
                 </p>
                 <div className="space-y-2">
-                  {tasks.filter(t => t.status !== "completed" && !scheduledTaskIds.has(t.id)).slice(0, 4).map(task => (
+                  {pendingUnscheduled.slice(0, 5).map(task => (
                     <div key={task.id} className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", PRIORITY_CONFIG[task.priority].dotColor)} />
                         <span className="text-xs text-muted-foreground truncate">{task.title}</span>
                       </div>
-                      <button
-                        onClick={() => { setScheduleTask(task); setScheduleDialogOpen(true); }}
-                        className="shrink-0 text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
-                      >
-                        <CalendarPlus className="h-3 w-3" />
+                      <button onClick={() => { setScheduleTask(task); setScheduleDialogOpen(true); }}
+                        className="shrink-0 text-indigo-400 hover:text-indigo-300 transition-colors">
+                        <CalendarPlus className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ))}
-                  {tasks.filter(t => t.status !== "completed" && !scheduledTaskIds.has(t.id)).length > 4 && (
+                  {pendingUnscheduled.length > 5 && (
                     <button onClick={() => setTopTab("tasks")}
                       className="text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full text-left pt-1">
-                      +{tasks.filter(t => t.status !== "completed" && !scheduledTaskIds.has(t.id)).length - 4} more → view all tasks
+                      +{pendingUnscheduled.length - 5} more → view all tasks
                     </button>
                   )}
                 </div>
@@ -675,7 +663,7 @@ export default function PlanPage() {
                   <Button onClick={openAddBlock} variant="outline" size="sm">
                     <Plus className="mr-1 h-3 w-3" /> Add block
                   </Button>
-                  {tasks.filter(t => t.status !== "completed").length > 0 && (
+                  {pendingUnscheduled.length > 0 && (
                     <Button onClick={() => setTopTab("tasks")} variant="outline" size="sm"
                       className="text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10">
                       <CalendarPlus className="mr-1 h-3 w-3" /> Schedule a task
@@ -696,7 +684,7 @@ export default function PlanPage() {
         </div>
       )}
 
-      {/* ══════════════════ TASKS TAB ══════════════════ */}
+      {/* ══════════ TASKS ══════════ */}
       {topTab === "tasks" && (
         <div className="space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -706,7 +694,6 @@ export default function PlanPage() {
             </Button>
           </div>
 
-          {/* View switcher */}
           <div className="flex items-center gap-1 bg-muted/30 border rounded-xl p-1 w-fit">
             {([
               { id: "list", icon: List, label: "List" },
@@ -735,7 +722,6 @@ export default function PlanPage() {
             </div>
           ) : (
             <>
-              {/* List view — enhanced with Schedule button */}
               {taskView === "list" && (
                 <div className="space-y-2">
                   {tasks.length === 0 ? (
@@ -745,16 +731,10 @@ export default function PlanPage() {
                       <p className="text-xs text-muted-foreground/60 mt-1">Create a task to get started</p>
                     </div>
                   ) : tasks.map(task => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      subtasks={subtasksMap[task.id] || []}
+                    <TaskRow key={task.id} task={task} subtasks={subtasksMap[task.id] || []}
                       scheduledIds={scheduledTaskIds}
-                      onToggle={handleToggleTaskComplete}
-                      onEdit={handleEditTask}
-                      onDelete={handleDeleteTask}
-                      onSchedule={(t) => { setScheduleTask(t); setScheduleDialogOpen(true); }}
-                    />
+                      onToggle={handleToggleTaskComplete} onEdit={handleEditTask} onDelete={handleDeleteTask}
+                      onSchedule={(t) => { setScheduleTask(t); setScheduleDialogOpen(true); }} />
                   ))}
                 </div>
               )}
@@ -766,9 +746,7 @@ export default function PlanPage() {
                 <TaskTodayView tasks={tasks} subtasksMap={subtasksMap}
                   onToggleComplete={handleToggleTaskComplete} onEdit={handleEditTask} onDelete={handleDeleteTask} />
               )}
-              {taskView === "calendar" && (
-                <TaskCalendarView tasks={tasks} onEdit={handleEditTask} />
-              )}
+              {taskView === "calendar" && <TaskCalendarView tasks={tasks} onEdit={handleEditTask} />}
             </>
           )}
         </div>
@@ -794,14 +772,10 @@ export default function PlanPage() {
                 onChange={e => setBlockForm(p => ({ ...p, description: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Start</Label>
-                <Input type="time" value={blockForm.startTime} onChange={e => setBlockForm(p => ({ ...p, startTime: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>End</Label>
-                <Input type="time" value={blockForm.endTime} onChange={e => setBlockForm(p => ({ ...p, endTime: e.target.value }))} />
-              </div>
+              <div className="space-y-1.5"><Label>Start</Label>
+                <Input type="time" value={blockForm.startTime} onChange={e => setBlockForm(p => ({ ...p, startTime: e.target.value }))} /></div>
+              <div className="space-y-1.5"><Label>End</Label>
+                <Input type="time" value={blockForm.endTime} onChange={e => setBlockForm(p => ({ ...p, endTime: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -828,6 +802,11 @@ export default function PlanPage() {
                 </Select>
               </div>
             </div>
+            {blockForm.type === "task" && !editingBlock && (
+              <p className="text-[11px] text-indigo-400/80 bg-indigo-500/5 border border-indigo-500/20 rounded-lg px-3 py-2">
+                A task will be automatically created and linked to this block.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBlockDialog(false)}>Cancel</Button>
@@ -850,9 +829,7 @@ export default function PlanPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => deleteBlockId && handleDeleteBlock(deleteBlockId)}>
-              Remove
-            </AlertDialogAction>
+              onClick={() => deleteBlockId && handleDeleteBlock(deleteBlockId)}>Remove</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -861,18 +838,13 @@ export default function PlanPage() {
       <TaskDialog
         open={taskDialogOpen}
         onOpenChange={(open) => { setTaskDialogOpen(open); if (!open) setEditingTask(null); }}
-        task={editingTask}
-        projects={projects}
+        task={editingTask} projects={projects}
         onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
       />
 
       {/* ══ Schedule Task Dialog ══ */}
-      <ScheduleTaskDialog
-        task={scheduleTask}
-        open={scheduleDialogOpen}
-        onOpenChange={setScheduleDialogOpen}
-        onConfirm={handleScheduleTaskConfirm}
-      />
+      <ScheduleTaskDialog task={scheduleTask} open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen} onConfirm={handleScheduleTaskConfirm} />
     </div>
   );
 }
