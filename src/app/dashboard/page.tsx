@@ -1,5 +1,3 @@
-//src/app/dashboard/page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -56,9 +54,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">Today</h1>
-          </div>
+          <h1 className="text-3xl font-bold tracking-tight">Today</h1>
           <p className="text-muted-foreground">Your command center for the day.</p>
         </div>
         <div className="flex items-center gap-4 pt-1">
@@ -78,26 +74,31 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : summary ? (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-          {/* Top Row: Metric Rings + Clock Widget */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="lg:col-span-3"><MetricRings summary={summary} /></div>
+          {/* Row 1: Metric Rings (3 cols) + Clock Widget (1 col) */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+            <div className="lg:col-span-3">
+              <MetricRings summary={summary} />
+            </div>
+            {/* Clock: only show clock + calendar + quote, no gap */}
             <div className="lg:col-span-1">
               <ClockWidget />
             </div>
           </div>
 
-          {/* Discipline Score — full width strip */}
+          {/* Row 2: Discipline Score (2 cols) — contained width, not full-width */}
           {discipline && (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              <div className="lg:col-span-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
                 <DisciplineScoreCard data={discipline} />
               </div>
+              {/* Empty col keeps layout balanced without stretching discipline card */}
+              <div className="hidden lg:block" />
             </div>
           )}
 
-          {/* Plan + Habits */}
+          {/* Row 3: Plan + Habits */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 min-h-[380px]">
               <TodaysPlan onDataChange={loadDashboard} />
@@ -110,7 +111,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Work Done + Goals */}
+          {/* Row 4: Work Done + Goals */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
               <FocusSummaryCard
