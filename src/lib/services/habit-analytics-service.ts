@@ -1,3 +1,5 @@
+//src/lib/services/habit-analytics-service.ts
+
 import { getHabits, getHabitLogs } from "./habit-service";
 import { getGamificationStats } from "./gamification-service";
 import { HabitAnalyticsData, DailyCompletion } from "../types/habit-analytics";

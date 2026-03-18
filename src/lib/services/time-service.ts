@@ -1,57 +1,56 @@
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { TimeLog, TimeLogFormData, ProjectTimeStats } from '../types/time';
 import { Task } from '../types/task';
-import { startOfDay, startOfWeek, endOfDay, endOfWeek, parseISO } from 'date-fns';
+import { startOfDay, startOfWeek, endOfDay, endOfWeek } from 'date-fns';
 
-const TIME_LOGS_STORAGE_KEY = 'lifeos_time_logs';
+// ── User-scoped localStorage key ─────────────────────────────────────────────
+async function getStorageKey(): Promise<string> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? "anonymous";
+    return `lifeos_time_logs_${uid}`;
+  } catch {
+    return "lifeos_time_logs_anonymous";
+  }
+}
 
 function generateId() {
-  return typeof crypto !== 'undefined' && crypto.randomUUID 
-    ? crypto.randomUUID() 
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
     : Math.random().toString(36).substring(2, 15);
 }
 
-// ---------------------------------------------------------------------------
-// CRUD
-// ---------------------------------------------------------------------------
-
 export async function getTimeLogs(startDate?: Date, endDate?: Date): Promise<TimeLog[]> {
   if (isSupabaseConfigured() && supabase) {
-    let query = supabase.from('time_logs').select('*');
-    
-    if (startDate) {
-      query = query.gte('start_time', startDate.toISOString());
-    }
-    if (endDate) {
-      query = query.lte('end_time', endDate.toISOString());
-    }
-    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error("Not authenticated");
+
+    let query = supabase
+      .from('time_logs')
+      .select('*')
+      .eq('user_id', session.user.id);
+
+    if (startDate) query = query.gte('start_time', startDate.toISOString());
+    if (endDate) query = query.lte('end_time', endDate.toISOString());
+
     const { data, error } = await query.order('start_time', { ascending: false });
-    
-    if (error) {
-      console.error("Supabase getTimeLogs error:", error);
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
     return data as TimeLog[];
   }
 
-  // --- LOCAL STORAGE FALLBACK ---
+  // Local storage fallback — user-scoped key
   try {
-    const raw = localStorage.getItem(TIME_LOGS_STORAGE_KEY);
+    const key = await getStorageKey();
+    const raw = localStorage.getItem(key);
     let logs: TimeLog[] = raw ? JSON.parse(raw) : [];
-    
     if (startDate || endDate) {
       logs = logs.filter(log => {
-        const logStart = new Date(log.start_time).getTime();
-        const start = startDate ? startDate.getTime() : 0;
-        const end = endDate ? endDate.getTime() : Infinity;
-        return logStart >= start && logStart <= end;
+        const t = new Date(log.start_time).getTime();
+        return t >= (startDate?.getTime() ?? 0) && t <= (endDate?.getTime() ?? Infinity);
       });
     }
-    
     return logs.sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
-  } catch (error) {
-    console.error("Local storage error:", error);
+  } catch {
     return [];
   }
 }
@@ -68,93 +67,58 @@ export async function saveTimeLog(formData: TimeLogFormData): Promise<TimeLog> {
   if (isSupabaseConfigured() && supabase) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
-
     const { data, error } = await supabase
       .from('time_logs')
       .insert([{ ...model, user_id: user.id }])
       .select()
       .single();
-      
-    if (error) {
-      console.error("Supabase saveTimeLog error:", error);
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
     return data as TimeLog;
   }
 
-  // --- LOCAL STORAGE FALLBACK ---
-  const newLog: TimeLog = {
-    id: generateId(),
-    ...model,
-    created_at: new Date().toISOString()
-  } as TimeLog;
-  
-  const existingRaw = localStorage.getItem(TIME_LOGS_STORAGE_KEY);
-  const existing = existingRaw ? JSON.parse(existingRaw) : [];
-  localStorage.setItem(TIME_LOGS_STORAGE_KEY, JSON.stringify([newLog, ...existing]));
-  
+  const newLog: TimeLog = { id: generateId(), ...model, created_at: new Date().toISOString() } as TimeLog;
+  const key = await getStorageKey();
+  const existing = JSON.parse(localStorage.getItem(key) || '[]');
+  localStorage.setItem(key, JSON.stringify([newLog, ...existing]));
   return newLog;
 }
 
 export async function deleteTimeLog(id: string): Promise<void> {
   if (isSupabaseConfigured() && supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error("Not authenticated");
     const { error } = await supabase
       .from('time_logs')
       .delete()
-      .eq('id', id);
-      
-    if (error) {
-      console.error("Supabase deleteTimeLog error:", error);
-      throw new Error(error.message);
-    }
+      .eq('id', id)
+      .eq('user_id', session.user.id);
+    if (error) throw new Error(error.message);
     return;
   }
-
-  // --- LOCAL STORAGE FALLBACK ---
-  const existingRaw = localStorage.getItem(TIME_LOGS_STORAGE_KEY);
-  if (existingRaw) {
-    const existing: TimeLog[] = JSON.parse(existingRaw);
-    localStorage.setItem(TIME_LOGS_STORAGE_KEY, JSON.stringify(existing.filter(i => i.id !== id)));
-  }
+  const key = await getStorageKey();
+  const existing: TimeLog[] = JSON.parse(localStorage.getItem(key) || '[]');
+  localStorage.setItem(key, JSON.stringify(existing.filter(i => i.id !== id)));
 }
-
-// ---------------------------------------------------------------------------
-// AGGREGATIONS
-// ---------------------------------------------------------------------------
 
 export async function getTodayFocusTime(): Promise<number> {
   const today = new Date();
-  const start = startOfDay(today);
-  const end = endOfDay(today);
-  
-  const logs = await getTimeLogs(start, end);
-  return logs.reduce((total, log) => total + log.duration_seconds, 0);
+  const logs = await getTimeLogs(startOfDay(today), endOfDay(today));
+  return logs.reduce((t, l) => t + l.duration_seconds, 0);
 }
 
 export async function getWeekFocusTime(): Promise<number> {
   const today = new Date();
-  // Monday as start of week (1)
-  const start = startOfWeek(today, { weekStartsOn: 1 });
-  const end = endOfWeek(today, { weekStartsOn: 1 });
-  
-  const logs = await getTimeLogs(start, end);
-  return logs.reduce((total, log) => total + log.duration_seconds, 0);
+  const logs = await getTimeLogs(
+    startOfWeek(today, { weekStartsOn: 1 }),
+    endOfWeek(today, { weekStartsOn: 1 })
+  );
+  return logs.reduce((t, l) => t + l.duration_seconds, 0);
 }
 
-/**
- * Returns focus time grouped by project for the given date range (or all time if not provided).
- * Requires fetching tasks to map task_id -> project.
- */
 export async function getProjectFocusTime(tasks: Task[], startDate?: Date, endDate?: Date): Promise<ProjectTimeStats[]> {
   const logs = await getTimeLogs(startDate, endDate);
-  
-  // Map task_id to project
   const taskToProjectMap = new Map<string, string>();
-  tasks.forEach(t => {
-    if (t.project) {
-      taskToProjectMap.set(t.id, t.project.name);
-    }
-  });
+  tasks.forEach(t => { if (t.project) taskToProjectMap.set(t.id, t.project.name); });
 
   const projectTotals = new Map<string, number>();
   let unassignedTotal = 0;
@@ -169,19 +133,8 @@ export async function getProjectFocusTime(tasks: Task[], startDate?: Date, endDa
   });
 
   const stats: ProjectTimeStats[] = Array.from(projectTotals.entries()).map(([name, seconds]) => ({
-    project_id: name,
-    project_name: name,
-    total_seconds: seconds
+    project_id: name, project_name: name, total_seconds: seconds
   }));
-
-  if (unassignedTotal > 0) {
-    stats.push({
-      project_id: 'unassigned',
-      project_name: 'No Project',
-      total_seconds: unassignedTotal
-    });
-  }
-
-  // Sort by highest time
+  if (unassignedTotal > 0) stats.push({ project_id: 'unassigned', project_name: 'No Project', total_seconds: unassignedTotal });
   return stats.sort((a, b) => b.total_seconds - a.total_seconds);
 }

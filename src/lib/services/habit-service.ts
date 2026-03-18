@@ -1,3 +1,5 @@
+//src/lib/services/habit-service.ts
+
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   Habit,

@@ -1,3 +1,5 @@
+//src/lib/services/discipline-service.ts
+
 import { DisciplineScore, DisciplineLabel, DisciplineHistory, DisciplineMetrics } from "../types/discipline";
 import { getTasks } from "./task-service";
 import { getHabits, getHabitLogs } from "./habit-service";

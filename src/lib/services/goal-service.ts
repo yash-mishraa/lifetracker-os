@@ -1,49 +1,35 @@
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { supabase } from '../supabase';
 import { Goal, Milestone, GoalWithMilestones, GoalFormData, MilestoneFormData } from '../types/goal';
 
-const GOALS_STORAGE_KEY = 'lifeos_goals';
-const MILESTONES_STORAGE_KEY = 'lifeos_milestones';
-
-// Helper for generating local IDs if needed
 function generateId() {
-  return typeof crypto !== 'undefined' && crypto.randomUUID 
-    ? crypto.randomUUID() 
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
     : Math.random().toString(36).substring(2, 15);
 }
 
-// ---------------------------------------------------------------------------
-// GOALS
-// ---------------------------------------------------------------------------
+// ── Goals ─────────────────────────────────────────────────────────────────────
 
 export async function getGoals(): Promise<GoalWithMilestones[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) throw new Error("User must be logged in to access goals.");
 
-  // 1. Fetch all goals for the logged in user
   const { data: goals, error: goalsError } = await supabase
     .from('goals')
     .select('*')
     .eq('user_id', session.user.id)
     .order('target_date', { ascending: true, nullsFirst: false });
-    
-  if (goalsError) {
-    console.error("Supabase getGoals error:", goalsError);
-    throw new Error(goalsError.message);
-  }
-  
-  // 2. Fetch all milestones (Row Level Security ensures we only get ours)
+  if (goalsError) throw new Error(goalsError.message);
+
+  // ✅ FIXED: filter milestones by user_id, not relying on RLS alone
   const { data: milestones, error: msError } = await supabase
     .from('milestones')
     .select('*')
+    .eq('user_id', session.user.id)
     .order('created_at', { ascending: true });
-    
-  if (msError) {
-    console.error("Supabase getMilestones error:", msError);
-  }
-  
+  if (msError) console.error("Supabase getMilestones error:", msError);
+
   const allMilestones = (milestones as Milestone[]) || [];
-  
-  // 3. Map together
+
   return (goals as Goal[]).map(goal => ({
     ...goal,
     milestones: allMilestones.filter(m => m.goal_id === goal.id)
@@ -54,25 +40,18 @@ export async function createGoal(formData: GoalFormData): Promise<Goal> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) throw new Error("User must be logged in to create goals.");
 
-  const goalModel: Partial<Goal> = {
-    title: formData.title,
-    description: formData.description || null as any,
-    category: formData.category,
-    target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null as any
-  };
-
-  const insertData = { ...goalModel, user_id: session.user.id };
-
   const { data, error } = await supabase
     .from('goals')
-    .insert([insertData])
+    .insert([{
+      title: formData.title,
+      description: formData.description || null,
+      category: formData.category,
+      target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null,
+      user_id: session.user.id,
+    }])
     .select()
     .single();
-    
-  if (error) {
-    console.error("Supabase createGoal error:", error);
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
   return data as Goal;
 }
 
@@ -80,26 +59,20 @@ export async function updateGoal(id: string, formData: GoalFormData): Promise<Go
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) throw new Error("User must be logged in to update goals.");
 
-  const updates: Partial<Goal> = {
-    title: formData.title,
-    description: formData.description || null as any,
-    category: formData.category,
-    target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null as any,
-    updated_at: new Date().toISOString()
-  };
-
   const { data, error } = await supabase
     .from('goals')
-    .update(updates)
+    .update({
+      title: formData.title,
+      description: formData.description || null,
+      category: formData.category,
+      target_date: formData.target_date ? formData.target_date.toISOString().split('T')[0] : null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
-    .eq('user_id', session.user.id) // Security: ensure it belongs to them
+    .eq('user_id', session.user.id)
     .select()
     .single();
-    
-  if (error) {
-    console.error("Supabase updateGoal error:", error);
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
   return data as Goal;
 }
 
@@ -112,40 +85,27 @@ export async function deleteGoal(id: string): Promise<void> {
     .delete()
     .eq('id', id)
     .eq('user_id', session.user.id);
-    
-  if (error) {
-    console.error("Supabase deleteGoal error:", error);
-    throw new Error(error.message);
-  }
-  // Supabase handles cascading delete for milestones
+  if (error) throw new Error(error.message);
 }
-// ---------------------------------------------------------------------------
-// MILESTONES
-// ---------------------------------------------------------------------------
+
+// ── Milestones ────────────────────────────────────────────────────────────────
 
 export async function addMilestone(goalId: string, formData: MilestoneFormData): Promise<Milestone> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) throw new Error("User must be logged in to add milestones.");
 
-  const msModel: Partial<Milestone> = {
-    goal_id: goalId,
-    title: formData.title,
-    description: formData.description || null as any,
-    is_completed: false
-  };
-
-  const insertData = { ...msModel, user_id: session.user.id };
-
   const { data, error } = await supabase
     .from('milestones')
-    .insert([insertData])
+    .insert([{
+      goal_id: goalId,
+      title: formData.title,
+      description: formData.description || null,
+      is_completed: false,
+      user_id: session.user.id,
+    }])
     .select()
     .single();
-    
-  if (error) {
-    console.error("Supabase addMilestone error:", error);
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
   return data as Milestone;
 }
 
@@ -153,17 +113,15 @@ export async function updateMilestone(id: string, updates: Partial<Milestone>): 
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) throw new Error("User must be logged in to update milestones.");
 
+  // ✅ FIXED: added .eq('user_id') so users can't update other users' milestones
   const { data, error } = await supabase
     .from('milestones')
     .update(updates)
     .eq('id', id)
+    .eq('user_id', session.user.id)
     .select()
     .single();
-    
-  if (error) {
-    console.error("Supabase updateMilestone error:", error);
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
   return data as Milestone;
 }
 
@@ -171,13 +129,11 @@ export async function deleteMilestone(id: string): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user?.id) throw new Error("User must be logged in to delete milestones.");
 
+  // ✅ FIXED: added .eq('user_id') safety check
   const { error } = await supabase
     .from('milestones')
     .delete()
-    .eq('id', id);
-    
-  if (error) {
-    console.error("Supabase deleteMilestone error:", error);
-    throw new Error(error.message);
-  }
+    .eq('id', id)
+    .eq('user_id', session.user.id);
+  if (error) throw new Error(error.message);
 }

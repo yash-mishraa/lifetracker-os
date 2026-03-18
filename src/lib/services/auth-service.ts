@@ -1,3 +1,5 @@
+//src/lib/services/auth-service.ts
+
 import { supabase } from '@/lib/supabase';
 
 export async function signInWithGoogle() {

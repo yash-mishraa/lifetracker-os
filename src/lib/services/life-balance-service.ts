@@ -1,3 +1,5 @@
+//src/lib/services/life-balance-service.ts
+
 import { LifeArea, LifeBalanceData, LifeBalanceScore } from "@/lib/types/life-balance";
 import { getTasks } from "./task-service";
 import { getHabits, getHabitLogs } from "./habit-service";

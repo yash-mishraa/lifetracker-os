@@ -1,46 +1,57 @@
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { HealthLog, HealthFormData } from "@/lib/types/health";
 
-const HEALTH_LOGS_KEY = "lifeos_health_logs";
+// ── User-scoped localStorage key ─────────────────────────────────────────────
+async function getStorageKey(): Promise<string> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? "anonymous";
+    return `lifeos_health_logs_${uid}`;
+  } catch {
+    return "lifeos_health_logs_anonymous";
+  }
+}
 
-// SSR-safe pseudo-random UUIDv4
 function generateId(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
     const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
 
-function getLocalHealthLogs(): HealthLog[] {
+async function getLocalHealthLogs(): Promise<HealthLog[]> {
   if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(HEALTH_LOGS_KEY);
-  return raw ? JSON.parse(raw) : [];
+  const key = await getStorageKey();
+  try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
 }
 
-function setLocalHealthLogs(logs: HealthLog[]) {
-  localStorage.setItem(HEALTH_LOGS_KEY, JSON.stringify(logs));
+async function setLocalHealthLogs(logs: HealthLog[]) {
+  const key = await getStorageKey();
+  localStorage.setItem(key, JSON.stringify(logs));
 }
-
-// ─── Health Service ─────────────────────────────────────────────────────────
 
 export async function getHealthLogs(startDate?: string, endDate?: string): Promise<HealthLog[]> {
   if (isSupabaseConfigured()) {
-    let query = supabase.from("health_logs").select("*").order("date", { ascending: true });
-    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error("Not authenticated");
+
+    let query = supabase
+      .from("health_logs")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .order("date", { ascending: true });
+
     if (startDate) query = query.gte("date", startDate);
     if (endDate) query = query.lte("date", endDate);
-    
+
     const { data, error } = await query;
     if (error) throw error;
     return data || [];
   }
 
-  let logs = getLocalHealthLogs();
+  let logs = await getLocalHealthLogs();
   if (startDate) logs = logs.filter(l => l.date >= startDate);
   if (endDate) logs = logs.filter(l => l.date <= endDate);
-  
-  // Sort ascending by date
   return logs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
 
@@ -51,11 +62,9 @@ export async function getHealthLogByDate(date: string): Promise<HealthLog | null
 
 export async function upsertHealthLog(data: HealthFormData): Promise<HealthLog> {
   const now = new Date().toISOString();
-
-
-  // Clean up data
   const weightVal = data.weight === "" ? null : Number(data.weight);
   const moodVal = data.mood === "" ? null : data.mood;
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
@@ -75,30 +84,21 @@ export async function upsertHealthLog(data: HealthFormData): Promise<HealthLog> 
   };
 
   if (isSupabaseConfigured()) {
-    // 1. Check if log exists for date
     const existing = await getHealthLogByDate(data.date);
-    
-    let dbPayload;
-    if (existing) {
-      dbPayload = { ...payload, id: existing.id };
-    } else {
-      dbPayload = { ...payload, id: generateId(), created_at: now };
-    }
+    const dbPayload = existing
+      ? { ...payload, id: existing.id }
+      : { ...payload, id: generateId(), created_at: now };
 
     const { data: result, error } = await supabase
       .from("health_logs")
       .upsert(dbPayload, { onConflict: "user_id,date" })
-      .select()
-      .single();
-      
+      .select().single();
     if (error) throw error;
     return result;
   }
 
-  // Local storage fallback
-  const logs = getLocalHealthLogs();
+  const logs = await getLocalHealthLogs();
   const existingIdx = logs.findIndex(l => l.date === data.date);
-  
   let result: HealthLog;
   if (existingIdx >= 0) {
     logs[existingIdx] = { ...logs[existingIdx], ...payload };
@@ -107,51 +107,45 @@ export async function upsertHealthLog(data: HealthFormData): Promise<HealthLog> 
     result = { id: generateId(), ...payload, created_at: now } as HealthLog;
     logs.push(result);
   }
-  
-  setLocalHealthLogs(logs);
+  await setLocalHealthLogs(logs);
   return result;
 }
 
 export async function deleteHealthLog(id: string): Promise<void> {
   if (isSupabaseConfigured()) {
-    const { error } = await supabase.from("health_logs").delete().eq("id", id);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error("Not authenticated");
+    const { error } = await supabase
+      .from("health_logs")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.user.id);
     if (error) throw error;
-  } else {
-    const logs = getLocalHealthLogs().filter(l => l.id !== id);
-    setLocalHealthLogs(logs);
+    return;
   }
+  const logs = (await getLocalHealthLogs()).filter(l => l.id !== id);
+  await setLocalHealthLogs(logs);
 }
 
 export async function getHealthGoals() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-
   const { data, error } = await supabase
     .from("health_goals")
     .select("*")
     .eq("user_id", user.id)
     .single();
-
-  // Return defaults if no goals set yet
-  if (error || !data) {
-    return { sleep_hours_goal: 7, water_intake_goal: 2.5, steps_goal: 8000 };
-  }
+  if (error || !data) return { sleep_hours_goal: 7, water_intake_goal: 2.5, steps_goal: 8000 };
   return data;
 }
 
-export async function upsertHealthGoals(goals: {
-  sleep_hours_goal: number;
-  water_intake_goal: number;
-  steps_goal: number;
-}) {
+export async function upsertHealthGoals(goals: { sleep_hours_goal: number; water_intake_goal: number; steps_goal: number }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-
   const { data, error } = await supabase
     .from("health_goals")
     .upsert({ ...goals, user_id: user.id }, { onConflict: "user_id" })
-    .select()
-    .single();
+    .select().single();
   if (error) throw error;
   return data;
 }
