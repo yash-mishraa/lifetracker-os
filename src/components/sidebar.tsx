@@ -89,13 +89,14 @@ function NavContent({ pathname, onNavClick }: { pathname: string; onNavClick?: (
 
 function SidebarHeader() {
   return (
-    <div className="flex items-center gap-2.5 px-6 py-5">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-        <Zap className="h-[18px] w-[18px] text-primary-foreground" />
-      </div>
-      <div>
-        <h1 className="text-base font-bold tracking-tight">LifeOS</h1>
-        <p className="text-[11px] text-muted-foreground leading-none">Tracker</p>
+    <div className="flex items-center px-6 py-5">
+      <div className="flex flex-col">
+        <span className="text-lg font-black tracking-tight leading-none">
+          Life<span className="text-indigo-500">OS</span>
+        </span>
+        <span className="text-[10px] text-muted-foreground/60 tracking-widest uppercase mt-0.5 font-medium">
+          Tracker
+        </span>
       </div>
     </div>
   );
