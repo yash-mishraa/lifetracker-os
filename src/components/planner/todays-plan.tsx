@@ -2,88 +2,164 @@
 
 import { useEffect, useState } from "react";
 import { getTodaySchedule } from "@/lib/services/planner-service";
+import { getTasks } from "@/lib/services/task-service";
 import { TimeBlock } from "@/lib/types/planner";
+import { Task, PRIORITY_CONFIG } from "@/lib/types/task";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CalendarDays, ChevronRight, CheckCircle2, Clock } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { isToday, isPast } from "date-fns";
 
 export function TodaysPlan() {
   const [schedule, setSchedule] = useState<TimeBlock[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"schedule" | "tasks">("schedule");
 
   useEffect(() => {
-    loadSchedule();
-  }, []);
-
-  async function loadSchedule() {
-    try {
-      const blocks = await getTodaySchedule();
-      // Only show up to 4 items on the dashboard
-      setSchedule(blocks.slice(0, 4));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+    async function load() {
+      try {
+        const [blocks, allTasks] = await Promise.all([
+          getTodaySchedule(),
+          getTasks(),
+        ]);
+        setSchedule(blocks.slice(0, 5));
+        // Today's + overdue tasks, not completed
+        const relevant = allTasks
+          .filter(t => t.status !== "completed" && (
+            !t.deadline ||
+            isToday(new Date(t.deadline)) ||
+            isPast(new Date(t.deadline))
+          ))
+          .slice(0, 5);
+        setTasks(relevant);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
     }
-  }
+    load();
+  }, []);
 
   return (
     <Card className="flex flex-col h-full bg-gradient-to-b from-card to-card/50">
-      <CardHeader className="border-b pb-4 px-6 flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-indigo-500" />
-          Today's Plan
+      <CardHeader className="border-b pb-3 px-5 flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-indigo-500" />
+          Today
         </CardTitle>
-        <Link href="/planner" className="hidden sm:flex items-center text-xs h-8 px-3 rounded-md hover:bg-accent text-indigo-500 font-medium transition-colors">
-            Full Planner <ChevronRight className="ml-1 h-3 w-3" />
+        <Link href="/plan" className="hidden sm:flex items-center text-xs h-7 px-2.5 rounded-md hover:bg-accent text-indigo-500 font-medium transition-colors">
+          Open Plan <ChevronRight className="ml-1 h-3 w-3" />
         </Link>
       </CardHeader>
-      
-      <CardContent className="p-0 flex-1 flex flex-col justify-start">
+
+      <CardContent className="p-0 flex-1 flex flex-col">
+        {/* Sub-tabs */}
+        <div className="flex border-b px-5 pt-2 gap-3">
+          <button
+            onClick={() => setActiveTab("schedule")}
+            className={cn(
+              "pb-2 text-xs font-medium border-b-2 transition-colors",
+              activeTab === "schedule"
+                ? "border-indigo-500 text-indigo-500"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+            Schedule {schedule.length > 0 && `· ${schedule.length}`}
+          </button>
+          <button
+            onClick={() => setActiveTab("tasks")}
+            className={cn(
+              "pb-2 text-xs font-medium border-b-2 transition-colors",
+              activeTab === "tasks"
+                ? "border-indigo-500 text-indigo-500"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+            Tasks {tasks.length > 0 && `· ${tasks.length}`}
+          </button>
+        </div>
+
         {loading ? (
-          <div className="h-32 flex items-center justify-center">
-            <div className="animate-pulse bg-muted h-2 w-1/3 rounded"></div>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="animate-pulse bg-muted h-2 w-1/3 rounded" />
           </div>
-        ) : schedule.length === 0 ? (
-          <div className="flex flex-col items-center justify-center text-center p-8 bg-muted/10 m-4 rounded-lg flex-1">
-            <p className="text-sm text-muted-foreground mb-3">Your schedule is empty.</p>
-            <Link href="/planner" className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground h-8 px-3">
-              Auto-Schedule Day
-            </Link>
+        ) : activeTab === "schedule" ? (
+          <div className="flex-1 flex flex-col">
+            {schedule.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
+                <p className="text-xs text-muted-foreground mb-3">No blocks scheduled today.</p>
+                <Link href="/plan" className="text-xs text-indigo-500 hover:text-indigo-400 transition-colors">
+                  Open Planner →
+                </Link>
+              </div>
+            ) : (
+              <div className="p-4 space-y-0">
+                <div className="relative border-l-2 border-muted ml-2 pl-4 pt-1 pb-1 space-y-3">
+                  {schedule.map((block) => (
+                    <div key={block.id} className={cn("relative flex items-start justify-between gap-2", block.isCompleted && "opacity-40")}>
+                      <div className={cn(
+                        "absolute -left-[21px] mt-1.5 h-2 w-2 rounded-full ring-4 ring-background",
+                        block.isCompleted ? "bg-muted-foreground"
+                          : block.energyLevel === "High" ? "bg-blue-500"
+                          : block.energyLevel === "Medium" ? "bg-indigo-500"
+                          : block.type === "habit" ? "bg-orange-500"
+                          : "bg-slate-500"
+                      )} />
+                      <div className="min-w-0 flex-1">
+                        <p className={cn("text-xs font-medium truncate", block.isCompleted && "line-through text-muted-foreground")}>
+                          {block.title}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5 flex items-center gap-1">
+                          <Clock className="h-2.5 w-2.5" />
+                          {block.startTime} – {block.endTime}
+                        </p>
+                      </div>
+                      {block.isCompleted && (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-3">
+                  <Link href="/plan" className="block text-center text-xs text-muted-foreground hover:text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg py-1.5 transition-colors">
+                    View full timeline
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="flex-1 w-full flex flex-col p-4 space-y-3">
-            <div className="relative border-l-2 border-muted ml-3 pl-4 pt-1 pb-1 space-y-4">
-              {schedule.map((block) => (
-                <div key={block.id} className={cn("relative flex items-center justify-between", block.isCompleted && "opacity-50")}>
-                  {/* Dot */}
-                  <div className={cn(
-                    "absolute -left-[21px] mt-1 h-2.5 w-2.5 rounded-full ring-4 ring-background",
-                    block.isCompleted ? "bg-muted-foreground" :
-                    block.energyLevel === 'High' ? "bg-blue-500" :
-                    block.energyLevel === 'Medium' ? "bg-indigo-500" :
-                    block.type === 'habit' ? "bg-orange-500" : "bg-slate-500"
-                  )} />
-                  
-                  <div className="flex-1 min-w-0 pr-3 cursor-default group">
-                    <p className={cn("text-sm font-medium truncate", block.isCompleted && "line-through text-muted-foreground")}>
-                      {block.title}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/80 mt-0.5 font-medium tracking-wide">
-                      {block.startTime} - {block.endTime}
-                    </p>
-                  </div>
+          <div className="flex-1 flex flex-col">
+            {tasks.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6">
+                <p className="text-xs text-muted-foreground mb-3">No tasks due today!</p>
+                <Link href="/plan" className="text-xs text-indigo-500 hover:text-indigo-400 transition-colors">
+                  Add a task →
+                </Link>
+              </div>
+            ) : (
+              <div className="p-4 space-y-2">
+                {tasks.map((task) => {
+                  const cfg = PRIORITY_CONFIG[task.priority];
+                  const isOverdue = task.deadline && isPast(new Date(task.deadline)) && !isToday(new Date(task.deadline));
+                  return (
+                    <div key={task.id} className="flex items-center gap-2.5 py-1">
+                      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dotColor)} />
+                      <p className="text-xs font-medium truncate flex-1">{task.title}</p>
+                      {isOverdue && (
+                        <span className="text-[10px] text-red-400 shrink-0">Overdue</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="pt-2">
+                  <Link href="/plan?tab=tasks" className="block text-center text-xs text-muted-foreground hover:text-foreground bg-muted/30 hover:bg-muted/50 rounded-lg py-1.5 transition-colors">
+                    View all tasks
+                  </Link>
                 </div>
-              ))}
-            </div>
-            
-            <div className="pt-2">
-              <Link href="/planner" className="inline-flex items-center justify-center whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:text-accent-foreground w-full text-xs text-muted-foreground bg-muted/30 hover:bg-muted/50 h-8 px-3">
-                 View Full Timeline
-              </Link>
-            </div>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

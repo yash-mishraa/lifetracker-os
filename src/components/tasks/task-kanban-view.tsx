@@ -1,3 +1,5 @@
+//src/components/tasks/task-kanban-view.tsx
+
 "use client";
 
 import { Task, STATUS_CONFIG, TaskStatus } from "@/lib/types/task";

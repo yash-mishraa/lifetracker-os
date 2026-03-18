@@ -1,3 +1,5 @@
+//src/lib/types/task.ts
+
 // ---- Enums / Unions ----
 
 export type Priority = "low" | "medium" | "high" | "critical";

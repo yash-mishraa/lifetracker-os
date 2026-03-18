@@ -16,6 +16,7 @@ import {
   ListTodo,
   Trophy,
   LogOut,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,8 +51,7 @@ function LogoutButton() {
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/planner", label: "Planner", icon: Calendar },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare },
+  { href: "/plan", label: "Plan", icon: LayoutGrid },
   { href: "/routines", label: "Routines", icon: ListTodo },
   { href: "/habits", label: "Habits", icon: Repeat },
   { href: "/health", label: "Health", icon: Heart },
@@ -65,7 +65,7 @@ function NavContent({ pathname, onNavClick }: { pathname: string; onNavClick?: (
   return (
     <nav className="flex flex-col gap-1 px-3">
       {navItems.map((item) => {
-        const isActive = pathname === item.href;
+        const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
         return (
           <Link
             key={item.href}
@@ -146,7 +146,7 @@ export function MobileHeader() {
       {/* Bottom Navigation Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-border/40 bg-background/90 backdrop-blur-2xl pb-safe pt-2 px-2 lg:hidden">
         {bottomNavItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
