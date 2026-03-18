@@ -89,15 +89,14 @@ function NavContent({ pathname, onNavClick }: { pathname: string; onNavClick?: (
 
 function SidebarHeader() {
   return (
-    <div className="flex items-center px-6 py-5">
-      <div className="flex flex-col">
-        <span className="text-lg font-black tracking-tight leading-none">
-          Life<span className="text-indigo-500">OS</span>
-        </span>
-        <span className="text-[10px] text-muted-foreground/60 tracking-widest uppercase mt-0.5 font-medium">
-          Tracker
-        </span>
+    <div className="px-6 py-5">
+      <div className="flex items-baseline gap-[3px]">
+        <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Life</span>
+        <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground/40">OS</span>
       </div>
+      <p className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground/40 mt-[1px] ml-[1px]">
+        Tracker
+      </p>
     </div>
   );
 }
@@ -136,7 +135,10 @@ export function MobileHeader() {
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border/40 bg-background/80 backdrop-blur-xl px-4 lg:hidden">
         <div className="flex items-center gap-2">
           <Zap className="h-5 w-5 text-primary" />
-          <span className="font-bold font-heading tracking-tight">LifeOS</span>
+          <div className="flex items-baseline gap-[3px]">
+  <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">Life</span>
+  <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground/40">OS</span>
+</div>
         </div>
         <div className="flex items-center gap-1">
           <NotificationBell />
