@@ -11,12 +11,50 @@ import { useToast } from "@/components/ui/use-toast";
 import { Check, Loader2, SendHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ComponentProps } from "react";
-type ButtonProps = ComponentProps<typeof Button>;import { cn } from "@/lib/utils";
+type ButtonProps = ComponentProps<typeof Button>;
+import { cn } from "@/lib/utils";
 
 let Typewriter: any;
 try { Typewriter = require("@/components/ui/typewriter-text").Typewriter; } catch { Typewriter = null; }
 
 const ease = [0.22, 1, 0.36, 1] as const;
+
+// ── ShaderGradient background (install: npm install shadergradient)
+function ShaderGradientLayer() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ShaderGradient, ShaderGradientCanvas } = require("shadergradient");
+    return (
+      <ShaderGradientCanvas style={{ position:"absolute", inset:0, width:"100%", height:"100%", zIndex:0 }}>
+        <ShaderGradient
+          animate="on" axesHelper="off" brightness={1.2}
+          cAzimuthAngle={180} cDistance={3.3} cPolarAngle={90} cameraZoom={1}
+          color1="#ea62a8" color2="#8af5ff" color3="#000000"
+          destination="onCanvas" embedMode="off" envPreset="city"
+          format="gif" fov={90} frameRate={10} gizmoHelper="hide"
+          grain="on" lightType="3d" pixelDensity={1}
+          positionX={-1.4} positionY={0} positionZ={0}
+          range="disabled" rangeEnd={40} rangeStart={0}
+          reflection={0.1} rotationX={0} rotationY={10} rotationZ={50}
+          shader="defaults" type="plane"
+          uAmplitude={1} uDensity={1.4} uFrequency={5.5}
+          uSpeed={0.3} uStrength={5.9} uTime={0} wireframe={false}
+        />
+      </ShaderGradientCanvas>
+    );
+  } catch {
+    // CSS fallback until shadergradient is installed
+    return (
+      <div className="absolute inset-0" style={{
+        background: `
+          radial-gradient(ellipse 80% 60% at 15% 40%, rgba(234,98,168,0.45) 0%, transparent 55%),
+          radial-gradient(ellipse 70% 80% at 85% 65%, rgba(138,245,255,0.35) 0%, transparent 55%),
+          #000
+        `
+      }} />
+    );
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CanvasRevealEffect
@@ -190,7 +228,7 @@ const SlideButton = forwardRef<HTMLButtonElement, ButtonProps & { onSlideComplet
       <motion.div
         animate={completed ? { width:"8rem" } : { width:"12rem" }}
         transition={{ type:"spring", stiffness:400, damping:40 }}
-        className="relative flex h-10 items-center justify-center rounded-full bg-white/10 border border-white/[0.08] overflow-hidden"
+        className="relative flex h-10 items-center justify-center rounded-full bg-white/10 border border-white/[0.08]"
       >
         {/* Glow */}
         <motion.div style={{ opacity: glowOpacity }}
@@ -289,15 +327,24 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-black text-white relative flex flex-col">
 
-      {/* ── Canvas background ── */}
+      {/* ── Background: ShaderGradient + dot matrix ── */}
       <div className="absolute inset-0 z-0">
+        {/* ShaderGradient layer */}
+        <ShaderGradientLayer />
+
+        {/* Dot matrix on top */}
         {canvasVisible && (
-          <CanvasRevealEffect animationSpeed={3} colors={[[255,255,255]]} dotSize={5} reverse={false} />
+          <div className="absolute inset-0 opacity-35">
+            <CanvasRevealEffect animationSpeed={3} colors={[[255,255,255]]} dotSize={4} reverse={false} showGradient={false} />
+          </div>
         )}
         {reverseCanvas && (
-          <CanvasRevealEffect animationSpeed={4} colors={[[255,255,255]]} dotSize={5} reverse={true} />
+          <div className="absolute inset-0 opacity-35">
+            <CanvasRevealEffect animationSpeed={4} colors={[[255,255,255]]} dotSize={4} reverse={true} showGradient={false} />
+          </div>
         )}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_50%,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.6)_100%)]" />
+        {/* Center darkening so form is readable */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_65%_65%_at_50%_50%,rgba(0,0,0,0.85)_0%,rgba(0,0,0,0.3)_100%)]" />
         <div className="absolute top-0 inset-x-0 h-1/3 bg-gradient-to-b from-black to-transparent" />
       </div>
 
@@ -383,7 +430,7 @@ export default function LoginPage() {
 
             {/* SlideButton for sign-in, regular for sign-up */}
             {!isSignUp ? (
-              <div className="pt-1 flex justify-center">
+              <div className="pt-1 flex justify-center overflow-visible">
                 <SlideButton onSlideComplete={handleSlideComplete} />
               </div>
             ) : (
