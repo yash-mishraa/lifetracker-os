@@ -33,21 +33,14 @@ export default function DashboardPage() {
     try {
       setErrorMsg(null);
       const [sumData, gamData, discData] = await Promise.all([
-        getTodaySummary(),
-        getGamificationStats(),
-        getDisciplineHistory(7),
+        getTodaySummary(), getGamificationStats(), getDisciplineHistory(7),
       ]);
-      setSummary(sumData);
-      setGamification(gamData);
-      setDiscipline(discData);
+      setSummary(sumData); setGamification(gamData); setDiscipline(discData);
     } catch (err: any) {
-      console.error("Dashboard Load Error:", err);
       setErrorMsg(err.message || String(err));
       toast({ title: "Failed to load dashboard", description: err.message, variant: "destructive" });
     } finally { setLoading(false); }
   }
-
-  const handleDataChange = () => { loadDashboard(); };
 
   return (
     <div className="p-6 md:p-12 space-y-8 max-w-7xl mx-auto">
@@ -56,7 +49,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold tracking-tight">Today</h1>
           <p className="text-muted-foreground">Your command center for the day.</p>
         </div>
-        <div className="pt-1"><QuickActions onActionComplete={handleDataChange} /></div>
+        <div className="pt-1"><QuickActions onActionComplete={loadDashboard} /></div>
       </div>
 
       {loading ? (
@@ -65,15 +58,16 @@ export default function DashboardPage() {
             <Skeleton className="h-[250px] lg:col-span-3 rounded-xl" />
             <Skeleton className="h-[250px] lg:col-span-1 rounded-xl" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Skeleton className="h-[400px] rounded-xl" /><Skeleton className="h-[400px] rounded-xl" /><Skeleton className="h-[400px] rounded-xl" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1,2,3].map(i => <Skeleton key={i} className="h-[400px] rounded-xl" />)}
           </div>
         </div>
       ) : summary ? (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-3"><MetricRings summary={summary} /></div>
-            <div className="lg:col-span-1 h-full min-h-[350px]">
+            <div className="lg:col-span-1 min-h-[350px]">
               {discipline && <DisciplineScoreCard data={discipline} />}
             </div>
           </div>
@@ -81,7 +75,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 min-h-[380px]"><TodaysPlan /></div>
             <div className="lg:col-span-1">
-              <TodayHabitsCard initialHabits={summary.habits.allScheduledToday} onHabitChange={handleDataChange} />
+              <TodayHabitsCard initialHabits={summary.habits.allScheduledToday} onHabitChange={loadDashboard} />
             </div>
           </div>
 
@@ -90,6 +84,7 @@ export default function DashboardPage() {
               <FocusSummaryCard
                 focusSeconds={summary.time.focusSecondsToday}
                 completedBlockMinutes={summary.time.completedBlockMinutes}
+                totalPlannedMinutes={summary.time.totalPlannedMinutes}
                 completedTasksCount={summary.tasks.completedTodayCount}
                 totalTasksCount={summary.tasks.totalDueTodayCount}
               />
@@ -101,7 +96,7 @@ export default function DashboardPage() {
 
           {gamification && (
             <>
-              <div className="mt-8 mb-4 border-t pt-8">
+              <div className="border-t pt-8">
                 <h2 className="text-xl font-bold tracking-tight">Your Progress</h2>
                 <p className="text-muted-foreground text-sm">Stay consistent to unlock more achievements.</p>
               </div>

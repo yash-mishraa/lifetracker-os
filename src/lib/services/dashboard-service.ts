@@ -28,10 +28,8 @@ export interface DashboardSummary {
   };
   time: {
     focusSecondsToday: number;
-    /** Minutes from completed planner blocks (non-break) */
     completedBlockMinutes: number;
-    /** Completed blocks for the work-done card */
-    completedBlocks: { startTime: string; endTime: string }[];
+    totalPlannedMinutes: number;
   };
   goals: {
     topActive: { goal: GoalWithMilestones; progress: number }[];
@@ -98,33 +96,36 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
     if (todayHealthLog.workout_done) loggedMetricsCount++;
   }
 
-  // --- TIME (timer-based) ---
+  // --- TIME ---
   const focusSecondsToday = timeLogs.reduce((sum, log) => sum + log.duration_seconds, 0);
 
   // --- PLANNER BLOCKS ---
-  // Count ALL non-break completed blocks toward work done
-  const completedBlocks = (todayBlocks as TimeBlock[])
-    .filter(b => b.isCompleted && b.type !== 'break')
-    .map(b => ({ startTime: b.startTime, endTime: b.endTime }));
-
-  const completedBlockMinutes = completedBlocks.reduce((sum, b) => {
+  // Total planned minutes (all non-break blocks, regardless of completion)
+  const nonBreakBlocks = (todayBlocks as TimeBlock[]).filter(b => b.type !== 'break');
+  const totalPlannedMinutes = nonBreakBlocks.reduce((sum, b) => {
     return sum + Math.max(0, parseTimeToMins(b.endTime) - parseTimeToMins(b.startTime));
   }, 0);
 
-  // Also add minutes from completed tasks that are NOT linked to a block
-  // (to avoid double-counting, only count tasks whose IDs aren't in the schedule)
+  // Completed block minutes
+  const completedNonBreakBlocks = nonBreakBlocks.filter(b => b.isCompleted);
+  const completedBlockMins = completedNonBreakBlocks.reduce((sum, b) => {
+    return sum + Math.max(0, parseTimeToMins(b.endTime) - parseTimeToMins(b.startTime));
+  }, 0);
+
+  // Add unlinked completed task estimated minutes (avoid double count)
   const scheduledTaskIds = new Set(
     (todayBlocks as TimeBlock[]).filter(b => b.sourceId).map(b => b.sourceId!)
   );
-  const completedUnlinkedTasks = allTasks.filter(t =>
-    t.completed_at &&
-    isSameDay(parseISO(t.completed_at), today) &&
-    !scheduledTaskIds.has(t.id) &&
-    t.estimated_minutes > 0
-  );
-  const unlinkedTaskMins = completedUnlinkedTasks.reduce((sum, t) => sum + t.estimated_minutes, 0);
+  const unlinkedTaskMins = allTasks
+    .filter(t =>
+      t.completed_at &&
+      isSameDay(parseISO(t.completed_at), today) &&
+      !scheduledTaskIds.has(t.id) &&
+      t.estimated_minutes > 0
+    )
+    .reduce((sum, t) => sum + t.estimated_minutes, 0);
 
-  const totalWorkMins = completedBlockMinutes + unlinkedTaskMins;
+  const completedBlockMinutes = completedBlockMins + unlinkedTaskMins;
 
   // --- GOALS ---
   const activeGoals = allGoals
@@ -143,19 +144,15 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
   // --- PRODUCTIVITY SCORE ---
   const taskRate = totalDueTodayCount > 0 ? completedTodayCount / totalDueTodayCount : 0;
   const habitRate = totalScheduledTodayCount > 0 ? completedHabitsCount / totalScheduledTodayCount : 0;
-  let focusRate = Math.min(focusSecondsToday / 7200, 1);
-  let healthRate = Math.min(loggedMetricsCount / 4, 1);
+  const focusRate = Math.min(focusSecondsToday / 7200, 1);
+  const healthRate = Math.min(loggedMetricsCount / 4, 1);
   const score = Math.round((taskRate * 30) + (habitRate * 30) + (focusRate * 20) + (healthRate * 20));
 
   return {
     tasks: { allDueToday, completedTodayCount, totalDueTodayCount },
     habits: { allScheduledToday, completedTodayCount: completedHabitsCount, totalScheduledTodayCount },
     health: { todayLog: todayHealthLog, loggedMetricsCount },
-    time: {
-      focusSecondsToday,
-      completedBlockMinutes: totalWorkMins,
-      completedBlocks,
-    },
+    time: { focusSecondsToday, completedBlockMinutes, totalPlannedMinutes },
     goals: { topActive: activeGoals },
     productivityScore: score,
   };
