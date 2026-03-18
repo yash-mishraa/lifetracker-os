@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { getTodaySummary, DashboardSummary } from "@/lib/services/dashboard-service";
 import { getGamificationStats } from "@/lib/services/gamification-service";
 import { GamificationStats } from "@/lib/types/gamification";
-import { getTodaySchedule } from "@/lib/services/planner-service";
-import { TimeBlock } from "@/lib/types/planner";
 import { MetricRings } from "@/components/dashboard/metric-rings";
 import { TodayHabitsCard } from "@/components/dashboard/today-habits-card";
 import { FocusSummaryCard } from "@/components/dashboard/focus-summary-card";
@@ -25,7 +23,6 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [gamification, setGamification] = useState<GamificationStats | null>(null);
   const [discipline, setDiscipline] = useState<DisciplineHistory | null>(null);
-  const [todayBlocks, setTodayBlocks] = useState<TimeBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { toast } = useToast();
@@ -35,16 +32,14 @@ export default function DashboardPage() {
   async function loadDashboard() {
     try {
       setErrorMsg(null);
-      const [sumData, gamData, discData, blocks] = await Promise.all([
+      const [sumData, gamData, discData] = await Promise.all([
         getTodaySummary(),
         getGamificationStats(),
         getDisciplineHistory(7),
-        getTodaySchedule(),
       ]);
       setSummary(sumData);
       setGamification(gamData);
       setDiscipline(discData);
-      setTodayBlocks(blocks);
     } catch (err: any) {
       console.error("Dashboard Load Error:", err);
       setErrorMsg(err.message || String(err));
@@ -54,15 +49,8 @@ export default function DashboardPage() {
 
   const handleDataChange = () => { loadDashboard(); };
 
-  // Completed planner blocks for work-done calculation
-  const completedBlocks = todayBlocks
-    .filter(b => b.isCompleted && b.type !== "break")
-    .map(b => ({ startTime: b.startTime, endTime: b.endTime }));
-
   return (
     <div className="p-6 md:p-12 space-y-8 max-w-7xl mx-auto">
-
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">Today</h1>
@@ -78,15 +66,11 @@ export default function DashboardPage() {
             <Skeleton className="h-[250px] lg:col-span-1 rounded-xl" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Skeleton className="h-[400px] rounded-xl" />
-            <Skeleton className="h-[400px] rounded-xl" />
-            <Skeleton className="h-[400px] rounded-xl" />
+            <Skeleton className="h-[400px] rounded-xl" /><Skeleton className="h-[400px] rounded-xl" /><Skeleton className="h-[400px] rounded-xl" />
           </div>
         </div>
       ) : summary ? (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-          {/* Top Row */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-3"><MetricRings summary={summary} /></div>
             <div className="lg:col-span-1 h-full min-h-[350px]">
@@ -94,23 +78,18 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Middle Row: Unified Plan + Habits */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 min-h-[380px]"><TodaysPlan /></div>
             <div className="lg:col-span-1">
-              <TodayHabitsCard
-                initialHabits={summary.habits.allScheduledToday}
-                onHabitChange={handleDataChange}
-              />
+              <TodayHabitsCard initialHabits={summary.habits.allScheduledToday} onHabitChange={handleDataChange} />
             </div>
           </div>
 
-          {/* Bottom Row: Work Done + Goals */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
               <FocusSummaryCard
                 focusSeconds={summary.time.focusSecondsToday}
-                completedBlocks={completedBlocks}
+                completedBlockMinutes={summary.time.completedBlockMinutes}
                 completedTasksCount={summary.tasks.completedTodayCount}
                 totalTasksCount={summary.tasks.totalDueTodayCount}
               />
@@ -120,7 +99,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Gamification */}
           {gamification && (
             <>
               <div className="mt-8 mb-4 border-t pt-8">
@@ -132,11 +110,7 @@ export default function DashboardPage() {
                   <ConsistencyScoreCard score={gamification.consistencyScore} />
                 </div>
                 <div className="md:col-span-2 border rounded-xl shadow-sm bg-card hover:border-primary/20 transition-all">
-                  <StreaksShowcase
-                    habits={gamification.streaks.habits}
-                    productivity={gamification.streaks.productivity}
-                    focus={gamification.streaks.focus}
-                  />
+                  <StreaksShowcase habits={gamification.streaks.habits} productivity={gamification.streaks.productivity} focus={gamification.streaks.focus} />
                 </div>
               </div>
               <div className="border rounded-xl shadow-sm bg-card hover:border-primary/20 transition-all">
