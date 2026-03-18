@@ -60,17 +60,35 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
     getScheduleForDate(today),
   ]);
 
-  // --- TASKS ---
+  // ── TASKS (from Supabase) ──────────────────────────────────────────────────
   const allDueToday = allTasks.filter(t =>
     t.status !== 'completed' ||
     (t.completed_at && isSameDay(parseISO(t.completed_at), today))
   );
-  const completedTodayCount = allTasks.filter(t =>
+  const completedTasksFromDB = allTasks.filter(t =>
     t.completed_at && isSameDay(parseISO(t.completed_at), today)
-  ).length;
-  const totalDueTodayCount = allDueToday.length;
+  );
 
-  // --- HABITS ---
+  // Task IDs that are already linked to a planner block (avoid double count)
+  const scheduledTaskIds = new Set(
+    (todayBlocks as TimeBlock[]).filter(b => b.sourceId).map(b => b.sourceId!)
+  );
+
+  // ── PLANNER BLOCKS (unlinked — no sourceId, type = task/focus) ────────────
+  // These are manually added blocks that have no linked DB task
+  const unlinkedBlocks = (todayBlocks as TimeBlock[]).filter(
+    b => !b.sourceId && b.type !== 'break'
+  );
+  const completedUnlinkedBlocks = unlinkedBlocks.filter(b => b.isCompleted);
+
+  // ── UNIFIED COUNTS ────────────────────────────────────────────────────────
+  // Total = DB tasks due today + unlinked planner blocks
+  const totalDueTodayCount = allDueToday.length + unlinkedBlocks.length;
+
+  // Completed = DB tasks completed today + completed unlinked blocks
+  const completedTodayCount = completedTasksFromDB.length + completedUnlinkedBlocks.length;
+
+  // ── HABITS ────────────────────────────────────────────────────────────────
   const allScheduledToday = allHabits
     .filter(h => {
       if (h.frequency_type === 'daily') return true;
@@ -86,7 +104,7 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
   const completedHabitsCount = allScheduledToday.filter(h => h.isCompletedToday).length;
   const totalScheduledTodayCount = allScheduledToday.length;
 
-  // --- HEALTH ---
+  // ── HEALTH ────────────────────────────────────────────────────────────────
   const todayHealthLog = healthLogs.find(l => l.date === todayStr) || null;
   let loggedMetricsCount = 0;
   if (todayHealthLog) {
@@ -96,27 +114,19 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
     if (todayHealthLog.workout_done) loggedMetricsCount++;
   }
 
-  // --- TIME ---
+  // ── TIME ──────────────────────────────────────────────────────────────────
   const focusSecondsToday = timeLogs.reduce((sum, log) => sum + log.duration_seconds, 0);
 
-  // --- PLANNER BLOCKS ---
-  // Total planned minutes (all non-break blocks, regardless of completion)
   const nonBreakBlocks = (todayBlocks as TimeBlock[]).filter(b => b.type !== 'break');
-  const totalPlannedMinutes = nonBreakBlocks.reduce((sum, b) => {
-    return sum + Math.max(0, parseTimeToMins(b.endTime) - parseTimeToMins(b.startTime));
-  }, 0);
+  const totalPlannedMinutes = nonBreakBlocks.reduce((sum, b) =>
+    sum + Math.max(0, parseTimeToMins(b.endTime) - parseTimeToMins(b.startTime)), 0);
 
-  // Completed block minutes
   const completedNonBreakBlocks = nonBreakBlocks.filter(b => b.isCompleted);
-  const completedBlockMins = completedNonBreakBlocks.reduce((sum, b) => {
-    return sum + Math.max(0, parseTimeToMins(b.endTime) - parseTimeToMins(b.startTime));
-  }, 0);
+  const completedBlockMins = completedNonBreakBlocks.reduce((sum, b) =>
+    sum + Math.max(0, parseTimeToMins(b.endTime) - parseTimeToMins(b.startTime)), 0);
 
-  // Add unlinked completed task estimated minutes (avoid double count)
-  const scheduledTaskIds = new Set(
-    (todayBlocks as TimeBlock[]).filter(b => b.sourceId).map(b => b.sourceId!)
-  );
-  const unlinkedTaskMins = allTasks
+  // Add unlinked completed task estimated_minutes (not already counted via blocks)
+  const unlinkedCompletedTaskMins = allTasks
     .filter(t =>
       t.completed_at &&
       isSameDay(parseISO(t.completed_at), today) &&
@@ -125,9 +135,9 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
     )
     .reduce((sum, t) => sum + t.estimated_minutes, 0);
 
-  const completedBlockMinutes = completedBlockMins + unlinkedTaskMins;
+  const completedBlockMinutes = completedBlockMins + unlinkedCompletedTaskMins;
 
-  // --- GOALS ---
+  // ── GOALS ─────────────────────────────────────────────────────────────────
   const activeGoals = allGoals
     .filter(g => {
       const total = g.milestones.length;
@@ -141,7 +151,7 @@ export async function getTodaySummary(): Promise<DashboardSummary> {
     })
     .slice(0, 3);
 
-  // --- PRODUCTIVITY SCORE ---
+  // ── PRODUCTIVITY SCORE ────────────────────────────────────────────────────
   const taskRate = totalDueTodayCount > 0 ? completedTodayCount / totalDueTodayCount : 0;
   const habitRate = totalScheduledTodayCount > 0 ? completedHabitsCount / totalScheduledTodayCount : 0;
   const focusRate = Math.min(focusSecondsToday / 7200, 1);
