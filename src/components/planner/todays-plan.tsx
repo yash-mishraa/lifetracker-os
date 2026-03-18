@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getTodaySchedule, saveSchedule } from "@/lib/services/planner-service";
+import { getScheduleForDate, saveScheduleForDate } from "@/lib/services/planner-service";
 import { getTasks, updateTask } from "@/lib/services/task-service";
 import { TimeBlock } from "@/lib/types/planner";
 import { Task, PRIORITY_CONFIG } from "@/lib/types/task";
@@ -19,12 +19,17 @@ export function TodaysPlan() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"schedule" | "tasks">("schedule");
   const { toast } = useToast();
+  const today = new Date();
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [blocks, allTasks] = await Promise.all([getTodaySchedule(), getTasks()]);
+      // Use getScheduleForDate to match the same storage key as the planner
+      const [blocks, allTasks] = await Promise.all([
+        getScheduleForDate(today),
+        getTasks(),
+      ]);
       setSchedule(blocks.slice(0, 6));
       const relevant = allTasks
         .filter(t => t.status !== "completed" && (
@@ -38,22 +43,26 @@ export function TodaysPlan() {
 
   async function handleToggleBlock(block: TimeBlock) {
     const isCompleting = !block.isCompleted;
-    const updated = schedule.map(b =>
+    // Get full schedule (not just the first 6) to avoid data loss
+    const fullSchedule = await getScheduleForDate(today);
+    const updated = fullSchedule.map(b =>
       b.id === block.id ? { ...b, isCompleted: isCompleting } : b
     );
-    setSchedule(updated);
-    try {
-      await saveSchedule(updated);
-      // Sync linked task if exists
-      if (block.sourceId) {
+    // Save using the same key as the planner
+    await saveScheduleForDate(today, updated);
+    // Update local state (show first 6)
+    setSchedule(updated.slice(0, 6));
+
+    // Sync linked task
+    if (block.sourceId) {
+      try {
         await updateTask(block.sourceId, {
           status: isCompleting ? "completed" : "todo",
           completed_at: isCompleting ? new Date().toISOString() : null,
         });
+      } catch (err: any) {
+        toast({ title: "Task sync failed", description: err.message, variant: "destructive" });
       }
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-      load();
     }
   }
 
@@ -67,6 +76,16 @@ export function TodaysPlan() {
         status: isCompleting ? "completed" : "todo",
         completed_at: isCompleting ? new Date().toISOString() : null,
       });
+      // Also update linked block if exists
+      const fullSchedule = await getScheduleForDate(today);
+      const linked = fullSchedule.find(b => b.sourceId === task.id);
+      if (linked) {
+        const updated = fullSchedule.map(b =>
+          b.id === linked.id ? { ...b, isCompleted: isCompleting } : b
+        );
+        await saveScheduleForDate(today, updated);
+        setSchedule(updated.slice(0, 6));
+      }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
       load();
@@ -91,7 +110,6 @@ export function TodaysPlan() {
       </CardHeader>
 
       <CardContent className="p-0 flex-1 flex flex-col">
-        {/* Sub-tabs */}
         <div className="flex border-b px-5 gap-4">
           <button onClick={() => setActiveTab("schedule")}
             className={cn("pb-2 pt-2.5 text-xs font-medium border-b-2 transition-colors",
@@ -134,15 +152,18 @@ export function TodaysPlan() {
                   {schedule.map((block) => (
                     <div key={block.id}
                       className={cn(
-                        "flex items-center gap-3 p-2.5 rounded-lg border transition-all",
+                        "flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer",
                         block.isCompleted
                           ? "opacity-50 bg-muted/10 border-transparent"
                           : "bg-card/50 border-border/50 hover:border-border"
-                      )}>
+                      )}
+                      onClick={() => handleToggleBlock(block)}
+                    >
                       <Checkbox
                         checked={!!block.isCompleted}
                         onCheckedChange={() => handleToggleBlock(block)}
                         className="rounded-full shrink-0 h-3.5 w-3.5"
+                        onClick={e => e.stopPropagation()}
                       />
                       <div className="flex-1 min-w-0">
                         <p className={cn("text-xs font-medium truncate",
@@ -189,13 +210,16 @@ export function TodaysPlan() {
                     return (
                       <div key={task.id}
                         className={cn(
-                          "flex items-center gap-2.5 p-2.5 rounded-lg border transition-all",
+                          "flex items-center gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer",
                           isDone ? "opacity-50 bg-muted/10 border-transparent" : "bg-card/50 border-border/50 hover:border-border"
-                        )}>
+                        )}
+                        onClick={() => handleToggleTask(task)}
+                      >
                         <Checkbox
                           checked={isDone}
                           onCheckedChange={() => handleToggleTask(task)}
                           className="rounded-full shrink-0 h-3.5 w-3.5"
+                          onClick={e => e.stopPropagation()}
                         />
                         <div className="flex-1 min-w-0">
                           <p className={cn("text-xs font-medium truncate", isDone && "line-through text-muted-foreground")}>

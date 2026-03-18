@@ -3,9 +3,8 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { TimeBlock } from "@/lib/types/planner";
-import { GripVertical, Clock, CheckCircle2, Lock, Flame } from "lucide-react";
+import { GripVertical, Clock, CheckCircle2, Lock, Flame, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Pencil, Trash2 } from "lucide-react";
 
 interface TimeBlockItemProps {
   block: TimeBlock;
@@ -79,7 +78,7 @@ export function TimeBlockItem({ block, onToggleComplete, onEdit, onDelete }: Tim
         </div>
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons — checkmark shown for ALL types */}
       <div className="flex items-stretch border-l border-inherit divide-x divide-inherit">
         {onEdit && (
           <button onClick={() => onEdit(block)}
@@ -88,15 +87,21 @@ export function TimeBlockItem({ block, onToggleComplete, onEdit, onDelete }: Tim
             <Pencil className="h-3.5 w-3.5 opacity-50 hover:opacity-100 transition-opacity" />
           </button>
         )}
-        {(block.type === "task" || block.type === "habit") && onToggleComplete && (
+
+        {/* ✅ Show for ALL block types, not just task/habit */}
+        {onToggleComplete && (
           <button
             onClick={() => onToggleComplete(block.id, !block.isCompleted)}
             className="px-2.5 flex items-center justify-center bg-background/20 hover:bg-background/40 transition-colors group/btn"
             title={block.isCompleted ? "Mark incomplete" : "Mark complete"}>
             <CheckCircle2 className={cn("h-4 w-4 transition-all",
-              block.isCompleted ? "text-emerald-500 fill-emerald-500/20" : "opacity-30 group-hover/btn:opacity-100")} />
+              block.isCompleted
+                ? "text-emerald-500 fill-emerald-500/20"
+                : "opacity-30 group-hover/btn:opacity-100"
+            )} />
           </button>
         )}
+
         {onDelete && (
           <button onClick={() => onDelete(block.id)}
             className="px-2.5 flex items-center justify-center bg-background/20 hover:bg-red-500/20 transition-colors group/del"
