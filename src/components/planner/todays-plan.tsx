@@ -13,7 +13,12 @@ import { cn } from "@/lib/utils";
 import { isToday, isPast } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 
-export function TodaysPlan() {
+interface TodaysPlanProps {
+  /** Called after any toggle so parent (dashboard) can reload its summary */
+  onDataChange?: () => void;
+}
+
+export function TodaysPlan({ onDataChange }: TodaysPlanProps) {
   const [schedule, setSchedule] = useState<TimeBlock[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +30,6 @@ export function TodaysPlan() {
 
   async function load() {
     try {
-      // Use getScheduleForDate to match the same storage key as the planner
       const [blocks, allTasks] = await Promise.all([
         getScheduleForDate(today),
         getTasks(),
@@ -43,17 +47,14 @@ export function TodaysPlan() {
 
   async function handleToggleBlock(block: TimeBlock) {
     const isCompleting = !block.isCompleted;
-    // Get full schedule (not just the first 6) to avoid data loss
+    // Always read full schedule to avoid data loss on partial save
     const fullSchedule = await getScheduleForDate(today);
     const updated = fullSchedule.map(b =>
       b.id === block.id ? { ...b, isCompleted: isCompleting } : b
     );
-    // Save using the same key as the planner
     await saveScheduleForDate(today, updated);
-    // Update local state (show first 6)
     setSchedule(updated.slice(0, 6));
 
-    // Sync linked task
     if (block.sourceId) {
       try {
         await updateTask(block.sourceId, {
@@ -64,6 +65,9 @@ export function TodaysPlan() {
         toast({ title: "Task sync failed", description: err.message, variant: "destructive" });
       }
     }
+
+    // Tell parent dashboard to reload summary so Work Done updates
+    onDataChange?.();
   }
 
   async function handleToggleTask(task: Task) {
@@ -76,7 +80,7 @@ export function TodaysPlan() {
         status: isCompleting ? "completed" : "todo",
         completed_at: isCompleting ? new Date().toISOString() : null,
       });
-      // Also update linked block if exists
+      // Sync linked planner block
       const fullSchedule = await getScheduleForDate(today);
       const linked = fullSchedule.find(b => b.sourceId === task.id);
       if (linked) {
@@ -86,6 +90,7 @@ export function TodaysPlan() {
         await saveScheduleForDate(today, updated);
         setSchedule(updated.slice(0, 6));
       }
+      onDataChange?.();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
       load();
@@ -151,14 +156,13 @@ export function TodaysPlan() {
                 <div className="space-y-1.5">
                   {schedule.map((block) => (
                     <div key={block.id}
+                      onClick={() => handleToggleBlock(block)}
                       className={cn(
-                        "flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer",
+                        "flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer select-none",
                         block.isCompleted
                           ? "opacity-50 bg-muted/10 border-transparent"
                           : "bg-card/50 border-border/50 hover:border-border"
-                      )}
-                      onClick={() => handleToggleBlock(block)}
-                    >
+                      )}>
                       <Checkbox
                         checked={!!block.isCompleted}
                         onCheckedChange={() => handleToggleBlock(block)}
@@ -209,12 +213,11 @@ export function TodaysPlan() {
                     const isInPlanner = scheduledTaskIds.has(task.id);
                     return (
                       <div key={task.id}
-                        className={cn(
-                          "flex items-center gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer",
-                          isDone ? "opacity-50 bg-muted/10 border-transparent" : "bg-card/50 border-border/50 hover:border-border"
-                        )}
                         onClick={() => handleToggleTask(task)}
-                      >
+                        className={cn(
+                          "flex items-center gap-2.5 p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                          isDone ? "opacity-50 bg-muted/10 border-transparent" : "bg-card/50 border-border/50 hover:border-border"
+                        )}>
                         <Checkbox
                           checked={isDone}
                           onCheckedChange={() => handleToggleTask(task)}

@@ -33,9 +33,13 @@ export default function DashboardPage() {
     try {
       setErrorMsg(null);
       const [sumData, gamData, discData] = await Promise.all([
-        getTodaySummary(), getGamificationStats(), getDisciplineHistory(7),
+        getTodaySummary(),
+        getGamificationStats(),
+        getDisciplineHistory(7),
       ]);
-      setSummary(sumData); setGamification(gamData); setDiscipline(discData);
+      setSummary(sumData);
+      setGamification(gamData);
+      setDiscipline(discData);
     } catch (err: any) {
       setErrorMsg(err.message || String(err));
       toast({ title: "Failed to load dashboard", description: err.message, variant: "destructive" });
@@ -73,9 +77,15 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 min-h-[380px]"><TodaysPlan /></div>
+            <div className="lg:col-span-2 min-h-[380px]">
+              {/* onDataChange triggers loadDashboard so Work Done card updates immediately */}
+              <TodaysPlan onDataChange={loadDashboard} />
+            </div>
             <div className="lg:col-span-1">
-              <TodayHabitsCard initialHabits={summary.habits.allScheduledToday} onHabitChange={loadDashboard} />
+              <TodayHabitsCard
+                initialHabits={summary.habits.allScheduledToday}
+                onHabitChange={loadDashboard}
+              />
             </div>
           </div>
 
@@ -105,7 +115,11 @@ export default function DashboardPage() {
                   <ConsistencyScoreCard score={gamification.consistencyScore} />
                 </div>
                 <div className="md:col-span-2 border rounded-xl shadow-sm bg-card hover:border-primary/20 transition-all">
-                  <StreaksShowcase habits={gamification.streaks.habits} productivity={gamification.streaks.productivity} focus={gamification.streaks.focus} />
+                  <StreaksShowcase
+                    habits={gamification.streaks.habits}
+                    productivity={gamification.streaks.productivity}
+                    focus={gamification.streaks.focus}
+                  />
                 </div>
               </div>
               <div className="border rounded-xl shadow-sm bg-card hover:border-primary/20 transition-all">
