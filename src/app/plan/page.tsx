@@ -1,5 +1,3 @@
-//src
-
 "use client";
 import { PageClock } from "@/components/ui/page-clock";
 import { useEffect, useState, useCallback } from "react";
@@ -45,6 +43,7 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   Plus, ChevronLeft, ChevronRight, CalendarDays, List,
   Columns3, Sun, CalendarPlus, Clock, Pencil, Trash2, CheckCircle2, MoreHorizontal,
+  Zap, Coffee, Target,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -76,6 +75,12 @@ function priorityToEnergy(priority: string): EnergyLevel {
   return "Low";
 }
 
+function energyToPriority(energy: EnergyLevel): "high" | "medium" | "low" {
+  if (energy === "High") return "high";
+  if (energy === "Medium") return "medium";
+  return "low";
+}
+
 function minsFromTimes(start: string, end: string): number {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
@@ -88,6 +93,18 @@ function deadlineFromTimeAndDate(date: Date, time: string): string {
   d.setHours(h, m, 0, 0);
   return d.toISOString().slice(0, 16);
 }
+
+function sortBlocks(blocks: TimeBlock[]): TimeBlock[] {
+  return [...blocks].sort((a, b) => a.startTime.localeCompare(b.startTime));
+}
+
+// Block type → display config
+const BLOCK_TYPE_CONFIG: Record<BlockType, { label: string; color: string; dot: string; icon: any }> = {
+  task:  { label: "Task",  color: "text-blue-400",   dot: "bg-blue-500",   icon: Target },
+  habit: { label: "Habit", color: "text-orange-400", dot: "bg-orange-500", icon: Target },
+  focus: { label: "Focus", color: "text-purple-400", dot: "bg-purple-500", icon: Zap },
+  break: { label: "Break", color: "text-green-400",  dot: "bg-green-500",  icon: Coffee },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mini Calendar
@@ -150,7 +167,59 @@ function MiniCalendar({ selected, onSelect, scheduledDates }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task Row with Schedule button
+// PlannerBlockRow — shows planner blocks (all types) in the Tasks tab
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PlannerBlockRow({ block, onToggle, onDelete }: {
+  block: TimeBlock;
+  onToggle: (id: string, completed: boolean) => void;
+  onDelete: (id: string) => void;
+}) {
+  const cfg = BLOCK_TYPE_CONFIG[block.type];
+  return (
+    <div className={cn(
+      "group flex items-start gap-3 p-3 rounded-xl border transition-all",
+      block.isCompleted
+        ? "opacity-50 bg-muted/10 border-muted/30"
+        : "bg-card/50 border-border hover:border-border/80 hover:shadow-sm"
+    )}>
+      <Checkbox
+        checked={!!block.isCompleted}
+        onCheckedChange={() => onToggle(block.id, !block.isCompleted)}
+        className="mt-0.5 rounded-full shrink-0"
+      />
+      <div className="flex-1 min-w-0">
+        <p className={cn("text-sm font-medium truncate", block.isCompleted && "line-through text-muted-foreground")}>
+          {block.title}
+        </p>
+        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+          <span className={cn("text-[10px] flex items-center gap-1 font-medium", cfg.color)}>
+            <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
+            {cfg.label}
+          </span>
+          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <Clock className="h-3 w-3" />{block.startTime} – {block.endTime}
+          </span>
+          {block.description && (
+            <span className="text-[10px] text-muted-foreground truncate max-w-[160px]">{block.description}</span>
+          )}
+          <span className="text-[10px] text-indigo-400/70 flex items-center gap-1">
+            <CalendarDays className="h-3 w-3" /> In planner
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          onClick={() => onDelete(block.id)}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task Row
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TaskRow({ task, subtasks, scheduledIds, onToggle, onEdit, onDelete, onSchedule }: {
@@ -316,17 +385,20 @@ export default function PlanPage() {
   const [scheduleTask, setScheduleTask] = useState<Task | null>(null);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
 
-  // Scheduled task IDs in currently viewed schedule
+  // IDs of tasks that already have a planner block
   const scheduledTaskIds: Set<string> = new Set(
     schedule.filter(b => b.sourceId).map(b => b.sourceId!)
   );
+
+  // Unlinked blocks (Focus, Break, Habit without sourceId) — shown in tasks tab
+  const unlinkedBlocks = schedule.filter(b => !b.sourceId);
 
   // ── Load planner ───────────────────────────────────────────────────────────
   const loadSchedule = useCallback(async (date: Date) => {
     setPlannerLoading(true);
     try {
       const blocks = await getScheduleForDate(date);
-      setSchedule(blocks);
+      setSchedule(sortBlocks(blocks));
       if (blocks.length > 0)
         setScheduledDates(prev => new Set([...prev, format(date, "yyyy-MM-dd")]));
     } catch (err: any) {
@@ -357,10 +429,11 @@ export default function PlanPage() {
 
   // ── Persist schedule ───────────────────────────────────────────────────────
   async function persistSchedule(blocks: TimeBlock[], date: Date = selectedDate) {
-    setSchedule(blocks);
+    const sorted = sortBlocks(blocks);
+    setSchedule(sorted);
     try {
-      await saveScheduleForDate(date, blocks);
-      if (blocks.length > 0)
+      await saveScheduleForDate(date, sorted);
+      if (sorted.length > 0)
         setScheduledDates(prev => new Set([...prev, format(date, "yyyy-MM-dd")]));
     } catch (err) { console.error("Failed to save schedule", err); }
   }
@@ -382,54 +455,69 @@ export default function PlanPage() {
     if (!blockForm.title.trim()) { toast({ title: "Title is required", variant: "destructive" }); return; }
 
     if (editingBlock) {
-      // Update block
-      await persistSchedule(schedule.map(b =>
+      // ── Update existing block ──
+      const updatedBlocks = schedule.map(b =>
         b.id === editingBlock.id ? { ...b, ...blockForm, description: blockForm.description || undefined } : b
-      ));
-      // If linked to a task, update task title too
-      if (editingBlock.sourceId) {
+      );
+      await persistSchedule(updatedBlocks);
+      // Sync linked task title if changed
+      if (editingBlock.sourceId && blockForm.title !== editingBlock.title) {
         try { await updateTask(editingBlock.sourceId, { title: blockForm.title }); loadTasks(); } catch {}
       }
       toast({ title: "Block updated." });
     } else {
-      const blockId = generateId();
-      // ── Feature 2: Block → Task auto-creation ──────────────────────────────
+      // ── Create new block ──
+      // ALL block types create a linked task so they appear in Tasks tab
       let sourceId: string | undefined;
-      if (blockForm.type === "task") {
-        try {
-          const newTask = await createTask({
-            ...DEFAULT_TASK_FORM,
-            title: blockForm.title,
-            description: blockForm.description,
-            priority: blockForm.energyLevel === "High" ? "high" : blockForm.energyLevel === "Medium" ? "medium" : "low",
-            status: "todo",
-            deadline: deadlineFromTimeAndDate(selectedDate, blockForm.startTime),
-            estimated_minutes: minsFromTimes(blockForm.startTime, blockForm.endTime),
-          });
-          sourceId = newTask.id;
-          loadTasks();
-        } catch (err) { console.error("Failed to create linked task", err); }
+      try {
+        const newTask = await createTask({
+          ...DEFAULT_TASK_FORM,
+          title: blockForm.title,
+          description: blockForm.description,
+          // Map block type to task priority
+          priority: energyToPriority(blockForm.energyLevel),
+          status: "todo",
+          // Set deadline to the block's start time on the selected date
+          deadline: deadlineFromTimeAndDate(selectedDate, blockForm.startTime),
+          estimated_minutes: minsFromTimes(blockForm.startTime, blockForm.endTime),
+          // Tag with block type so tasks tab can show type info
+          tags: [blockForm.type],
+        });
+        sourceId = newTask.id;
+        loadTasks();
+      } catch (err) {
+        console.error("Failed to create linked task for block", err);
+        // Still create the block even if task creation fails
       }
+
       const block: TimeBlock = {
-        id: blockId, ...blockForm,
+        id: generateId(),
+        ...blockForm,
         description: blockForm.description || undefined,
         isCompleted: false,
         sourceId,
       };
       await persistSchedule([...schedule, block]);
-      toast({ title: "Block added." + (sourceId ? " Task created automatically." : "") });
+
+      const typeLabel = BLOCK_TYPE_CONFIG[blockForm.type].label;
+      toast({ title: `${typeLabel} block added.`, description: sourceId ? "Also added to your task list." : undefined });
     }
     setShowBlockDialog(false);
   }
 
   async function handleDeleteBlock(id: string) {
+    const block = schedule.find(b => b.id === id);
+    // If linked to a task, delete the task too
+    if (block?.sourceId) {
+      try { await deleteTask(block.sourceId); loadTasks(); } catch {}
+    }
     await persistSchedule(schedule.filter(b => b.id !== id));
     setDeleteBlockId(null);
     toast({ title: "Block removed." });
   }
 
   async function handleToggleComplete(id: string, isCompleted: boolean) {
-    const updated = schedule.map(b => b.id === id ? { ...b, isCompleted } : b);
+    const updated = sortBlocks(schedule.map(b => b.id === id ? { ...b, isCompleted } : b));
     setSchedule(updated);
     const block = schedule.find(b => b.id === id);
     if (block?.sourceId) {
@@ -437,12 +525,22 @@ export default function PlanPage() {
         await updateTask(block.sourceId, { status: isCompleted ? "completed" : "todo" });
         loadTasks();
       } catch (err: any) {
-        toast({ title: "Action failed", description: err.message, variant: "destructive" });
+        toast({ title: "Sync failed", description: err.message, variant: "destructive" });
         setSchedule(schedule); return;
       }
     }
     try { await saveScheduleForDate(selectedDate, updated); } catch {}
     if (isCompleted) toast({ title: "Marked as complete!" });
+  }
+
+  // Toggle a planner block's completion from the tasks tab
+  async function handleToggleBlockFromTasks(blockId: string, completed: boolean) {
+    await handleToggleComplete(blockId, completed);
+  }
+
+  // Delete a planner block from the tasks tab
+  async function handleDeleteBlockFromTasks(blockId: string) {
+    await handleDeleteBlock(blockId);
   }
 
   // ── Schedule task into planner ─────────────────────────────────────────────
@@ -458,7 +556,7 @@ export default function PlanPage() {
       startTime, endTime, sourceId: task.id,
       isCompleted: task.status === "completed", isLocked: false,
     };
-    const updated = [...existingBlocks, block].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const updated = sortBlocks([...existingBlocks, block]);
     await saveScheduleForDate(date, updated);
     setScheduledDates(prev => new Set([...prev, format(date, "yyyy-MM-dd")]));
     if (isSameDay(date, selectedDate)) setSchedule(updated);
@@ -469,18 +567,24 @@ export default function PlanPage() {
   const handleCreateTask = async (data: TaskFormData) => {
     const newTask = await createTask(data);
     loadTasks();
-    // ── Feature 1: Task → Planner auto-block ──────────────────────────────────
-    // Only auto-schedule if deadline is today
+
+    // ── FIXED: Auto-schedule on ANY date that has a deadline, not just today ──
     if (data.deadline) {
       const deadlineDate = new Date(data.deadline);
-      if (isToday(deadlineDate)) {
-        const sh = String(deadlineDate.getHours()).padStart(2, "0");
-        const sm = String(deadlineDate.getMinutes()).padStart(2, "0");
-        const startTime = `${sh}:${sm}`;
-        const endMins = deadlineDate.getHours() * 60 + deadlineDate.getMinutes() + (data.estimated_minutes || 60);
-        const endTime = `${String(Math.floor(endMins / 60)).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}`;
-        const todayBlocks = await getScheduleForDate(new Date());
-        if (!todayBlocks.some(b => b.sourceId === newTask.id)) {
+      const taskDate = new Date(deadlineDate);
+      taskDate.setHours(0, 0, 0, 0);
+
+      const sh = String(deadlineDate.getHours()).padStart(2, "0");
+      const sm = String(deadlineDate.getMinutes()).padStart(2, "0");
+      const startTime = `${sh}:${sm}`;
+      const durationMins = data.estimated_minutes || 60;
+      const endTotalMins = deadlineDate.getHours() * 60 + deadlineDate.getMinutes() + durationMins;
+      const endTime = `${String(Math.floor(endTotalMins / 60)).padStart(2, "0")}:${String(endTotalMins % 60).padStart(2, "0")}`;
+
+      // Don't schedule if start time is midnight (00:00) — means no time was set
+      if (startTime !== "00:00") {
+        const dateBlocks = await getScheduleForDate(taskDate);
+        if (!dateBlocks.some(b => b.sourceId === newTask.id)) {
           const block: TimeBlock = {
             id: generateId(), type: "task",
             title: newTask.title, description: newTask.description || undefined,
@@ -488,10 +592,11 @@ export default function PlanPage() {
             startTime, endTime, sourceId: newTask.id,
             isCompleted: false, isLocked: false,
           };
-          const updated = [...todayBlocks, block].sort((a, b) => a.startTime.localeCompare(b.startTime));
-          await saveScheduleForDate(new Date(), updated);
-          if (isToday(selectedDate)) setSchedule(updated);
-          setScheduledDates(prev => new Set([...prev, format(new Date(), "yyyy-MM-dd")]));
+          const updated = sortBlocks([...dateBlocks, block]);
+          await saveScheduleForDate(taskDate, updated);
+          setScheduledDates(prev => new Set([...prev, format(taskDate, "yyyy-MM-dd")]));
+          // Update schedule view if currently viewing that date
+          if (isSameDay(taskDate, selectedDate)) setSchedule(updated);
         }
       }
     }
@@ -501,7 +606,7 @@ export default function PlanPage() {
     if (!editingTask) return;
     await updateTask(editingTask.id, data);
     setEditingTask(null); loadTasks();
-    // Update linked block title if it changed
+    // Sync linked block title
     const linked = schedule.find(b => b.sourceId === editingTask.id);
     if (linked && data.title !== linked.title) {
       await persistSchedule(schedule.map(b =>
@@ -513,11 +618,13 @@ export default function PlanPage() {
   const handleDeleteTask = async (task: Task) => {
     await deleteTask(task.id);
     loadTasks();
-    // Remove linked block from schedule too
+    // Remove linked planner block
     const hasLinked = schedule.some(b => b.sourceId === task.id);
     if (hasLinked) {
       await persistSchedule(schedule.filter(b => b.sourceId !== task.id));
       toast({ title: "Task and its schedule block removed." });
+    } else {
+      toast({ title: "Task deleted." });
     }
   };
 
@@ -527,7 +634,7 @@ export default function PlanPage() {
     const isCompleting = task.status !== "completed";
     const linked = schedule.find(b => b.sourceId === task.id);
     if (linked) {
-      const updated = schedule.map(b => b.id === linked.id ? { ...b, isCompleted: isCompleting } : b);
+      const updated = sortBlocks(schedule.map(b => b.id === linked.id ? { ...b, isCompleted: isCompleting } : b));
       setSchedule(updated);
       await saveScheduleForDate(selectedDate, updated);
     }
@@ -540,6 +647,7 @@ export default function PlanPage() {
   const dateLabel = isSelectedToday ? "Today" : format(selectedDate, "EEEE, d MMM");
   const allTags = getAllTags(tasks);
   const pendingUnscheduled = tasks.filter(t => t.status !== "completed" && !scheduledTaskIds.has(t.id));
+  const totalIncomplete = tasks.filter(t => t.status !== "completed").length + unlinkedBlocks.filter(b => !b.isCompleted).length;
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -564,9 +672,9 @@ export default function PlanPage() {
               {tab === "planner" ? <CalendarDays className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
               {tab === "planner" ? "Planner" : (
                 <span className="flex items-center gap-1.5">Tasks
-                  {tasks.filter(t => t.status !== "completed").length > 0 && (
+                  {totalIncomplete > 0 && (
                     <span className="text-[10px] bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded-full">
-                      {tasks.filter(t => t.status !== "completed").length}
+                      {totalIncomplete}
                     </span>
                   )}
                 </span>
@@ -591,10 +699,13 @@ export default function PlanPage() {
             )}
             <div className="bg-card border rounded-2xl p-5 shadow-sm">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Block types</p>
-              {[["bg-blue-500","Task"],["bg-orange-500","Habit"],["bg-purple-500","Focus"],["bg-green-500","Break"]].map(([c,l]) => (
-                <div key={l} className="flex items-center gap-2.5 mb-2 last:mb-0">
-                  <span className={cn("h-2 w-2 rounded-full", c)} />
-                  <span className="text-xs text-muted-foreground">{l}</span>
+              {[["bg-blue-500","Task","Creates a linked task"],["bg-orange-500","Habit","Habit tracking block"],["bg-purple-500","Focus","Deep work session"],["bg-green-500","Break","Rest & recovery"]].map(([c,l,desc]) => (
+                <div key={l} className="flex items-start gap-2.5 mb-2.5 last:mb-0">
+                  <span className={cn("h-2 w-2 rounded-full mt-1 shrink-0", c)} />
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium">{l}</span>
+                    <p className="text-[10px] text-muted-foreground/50">{desc}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -727,11 +838,30 @@ export default function PlanPage() {
             <>
               {taskView === "list" && (
                 <div className="space-y-2">
-                  {tasks.length === 0 ? (
+                  {/* ── Planner blocks without a DB task link (Focus, Break, etc.) ── */}
+                  {unlinkedBlocks.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/40 px-1 pt-1">
+                        From Planner · {format(selectedDate, "MMM d")}
+                      </p>
+                      {unlinkedBlocks.map(block => (
+                        <PlannerBlockRow
+                          key={block.id}
+                          block={block}
+                          onToggle={handleToggleBlockFromTasks}
+                          onDelete={handleDeleteBlockFromTasks}
+                        />
+                      ))}
+                      {tasks.length > 0 && <div className="h-px bg-border/50 my-3" />}
+                    </div>
+                  )}
+
+                  {/* ── DB Tasks ── */}
+                  {tasks.length === 0 && unlinkedBlocks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                       <CheckCircle2 className="h-12 w-12 text-muted-foreground/20 mb-4" />
                       <p className="text-sm text-muted-foreground">No tasks found</p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">Create a task to get started</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">Create a task or add a planner block to get started</p>
                     </div>
                   ) : tasks.map(task => (
                     <TaskRow key={task.id} task={task} subtasks={subtasksMap[task.id] || []}
@@ -805,11 +935,9 @@ export default function PlanPage() {
                 </Select>
               </div>
             </div>
-            {blockForm.type === "task" && !editingBlock && (
-              <p className="text-[11px] text-indigo-400/80 bg-indigo-500/5 border border-indigo-500/20 rounded-lg px-3 py-2">
-                A task will be automatically created and linked to this block.
-              </p>
-            )}
+            <p className="text-[11px] text-muted-foreground/60 bg-muted/20 border border-border/40 rounded-lg px-3 py-2">
+              All blocks are added to your task list automatically.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBlockDialog(false)}>Cancel</Button>
@@ -826,7 +954,7 @@ export default function PlanPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this block?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the block from {isSelectedToday ? "today's" : format(selectedDate, "MMM d's")} schedule.
+              This will remove the block from {isSelectedToday ? "today's" : format(selectedDate, "MMM d's")} schedule and delete the linked task.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -839,12 +967,12 @@ export default function PlanPage() {
 
       {/* ══ Task Dialog ══ */}
       <TaskDialog
-  open={taskDialogOpen}
-  onOpenChange={(open) => { setTaskDialogOpen(open); if (!open) setEditingTask(null); }}
-  task={editingTask} projects={projects}
-  forDate={selectedDate}
-  onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
-/>
+        open={taskDialogOpen}
+        onOpenChange={(open) => { setTaskDialogOpen(open); if (!open) setEditingTask(null); }}
+        task={editingTask} projects={projects}
+        forDate={selectedDate}
+        onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
+      />
 
       {/* ══ Schedule Task Dialog ══ */}
       <ScheduleTaskDialog task={scheduleTask} open={scheduleDialogOpen}
